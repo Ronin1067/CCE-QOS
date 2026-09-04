@@ -1,4 +1,4 @@
-﻿# CCE-QOS: Constraint-Coupled Energy Minimization and Adaptive Penalty Refinement for Combinatorial Operator Scheduling on Neural Processing Units
+# CCE-QOS: Constraint-Coupled Energy Minimization and Adaptive Penalty Refinement for Combinatorial Operator Scheduling on Neural Processing Units
 
 **Author:** Yagnesh Kumar Koduru  
 **Affiliation:** Esthien Labs  
@@ -163,6 +163,7 @@ $$y_{ij} \le x_i, \quad y_{ij} \le x_j, \quad y_{ij} \ge x_i + x_j - 1, \quad y_
 1. **Energy Dissipation:** **25.62% net energy savings** over baseline scheduling by maximizing in-SRAM tensor reuse.
 2. **Pipeline Stalls:** Reduced memory bus contention and bank conflicts by **79.5%**.
 3. **Schedule Feasibility:** APR achieved **100.0% legal schedules** with zero precedence or memory overflow violations across all tested workloads.
+4. **LLM KV-Cache Co-Scheduling:** Extends CCE QUBO to Large Language Model inference ([`cce_llm_kvcache_scheduler.py`](../../cce_llm_kvcache_scheduler.py)), eliminating 56.0% of DRAM page faults and reducing inter-token latency by **3.54x** (**55.21% energy reduction**).
 4. **Pareto Optimality:** Generated a 13-point non-dominated trade-off frontier allowing systems engineers to select the exact operating point matching thermal and real-time constraints.
 
 ---

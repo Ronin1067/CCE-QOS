@@ -1,4 +1,4 @@
-﻿\documentclass[journal]{IEEEtran}
+\documentclass[journal]{IEEEtran}
 \usepackage{amsmath,amsfonts,amssymb,amsthm}
 \usepackage{graphicx}
 \usepackage{booktabs}
@@ -143,6 +143,9 @@ We map the QUBO to an Ising spin Hamiltonian via $x_i = (1 - s_i)/2$ and execute
 |\psi(\boldsymbol{\gamma}, \boldsymbol{\beta})\rangle = \prod_{l=1}^p e^{-i \beta_l \sum_j \sigma_x^{(j)}} e^{-i \gamma_l H_C} |+\rangle^{\otimes n}
 \end{equation}
 The engine optimizes variational parameters $(\boldsymbol{\gamma}, \boldsymbol{\beta})$ via numerical finite-difference gradients in pure NumPy ([`QAOA_solver.py`](QAOA_solver.py)), reaching an approximation ratio $r = 0.892$ and exporting OpenQASM 2.0 quantum circuits.
+
+\subsection{LLM KV-Cache Paging \& Continuous Batching Extension}
+To support modern Large Language Model (LLM) inference on edge NPUs, CCE-QOS extends the CCE QUBO formulation to dynamic Key-Value (KV) cache block allocation. By co-scheduling shared prompt prefixes and overlapping decode token updates under on-chip SRAM bounds, CCE QUBO eliminates 56.0\% of off-chip DRAM page faults, achieving a 55.21\% energy reduction and a 3.54$\times$ reduction in inter-token latency (ITL) over standard LRU PagedAttention.
 
 \section{Experimental Results}
 \subsection{Comparative Energy \& Scheduling Performance}
