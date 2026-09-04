@@ -7,19 +7,23 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Sequence, Set, Tuple
 
-from graph_builder import WorkloadGraph
+from core_types import OperatorGraph
 
 
-@dataclass
+@dataclass(slots=True)
 class ScheduleResult:
     strategy: str
-    order: List[str]
+    order: List[int]
     score: float
     metadata: Dict
 
 
 class SchedulingEngine:
-    def __init__(self, graph: WorkloadGraph, random_seed: int = 7):
+    """
+    Classical schedule search engine over topologically valid orders.
+    """
+
+    def __init__(self, graph: OperatorGraph, random_seed: int = 7) -> None:
         self.graph = graph
         self.rng = random.Random(random_seed)
         self.levels = graph.compute_levels()
@@ -27,19 +31,19 @@ class SchedulingEngine:
         self.descendants = graph.descendant_count()
         self.max_critical = max(self.critical_path.values()) if self.critical_path else 1.0
 
-    def _priority_score(self, node_id: str, penalties: Dict[str, float], frontier_width: int) -> float:
-        node = self.graph.nodes[node_id]
+    def _priority_score(self, node_id: int, penalties: Dict[str, float], frontier_width: int) -> float:
+        node = self.graph.node_by_id[node_id]
 
         cp_norm = self.critical_path[node_id] / max(1.0, self.max_critical)
         depth = self.levels[node_id]
-        fanout = len(self.graph.children[node_id])
+        fanout = len(self.graph.children_by_id[node_id])
         desc = self.descendants[node_id]
 
-        critical_bonus = node.attrs.get("criticality", 1.0)
-        mem_pressure = (node.input_size + node.output_size) * penalties.get("dram_pressure", 1.0)
-        sram_risk = max(0.0, node.output_size - node.attrs.get("sram_hint", node.output_size * 0.75))
-        sram_risk *= penalties.get("sram_capacity", 1.0)
-        bandwidth_risk = (node.input_size / max(1.0, node.compute_cycles)) * penalties.get("bandwidth_capacity", 1.0)
+        critical_bonus = float(node.attrs.get("criticality", 1.0))
+        mem_pressure = (node.input_bytes + node.output_bytes) * penalties.get("dram_pressure", 1.0)
+        sram_hint = float(node.attrs.get("sram_hint", node.output_bytes * 0.75))
+        sram_risk = max(0.0, node.output_bytes - sram_hint) * penalties.get("sram_capacity", 1.0)
+        bandwidth_risk = (node.input_bytes / max(1.0, node.compute_cycles)) * penalties.get("bandwidth_capacity", 1.0)
 
         frontier_bonus = 1.0 / max(1.0, frontier_width)
         unlock_gain = 0.9 * fanout + 0.08 * desc
@@ -56,12 +60,12 @@ class SchedulingEngine:
 
     def _biased_complete_order(
         self,
-        prefix: Sequence[str],
+        prefix: Sequence[int],
         penalties: Dict[str, float],
         exploration_noise: float,
-    ) -> List[str]:
-        scheduled = set(prefix)
-        order = list(prefix)
+    ) -> List[int]:
+        scheduled = set(int(x) for x in prefix)
+        order = list(int(x) for x in prefix)
 
         while len(order) < len(self.graph.nodes):
             ready = self.graph.ready_nodes(scheduled)
@@ -80,9 +84,9 @@ class SchedulingEngine:
             scheduled.add(chosen)
         return order
 
-    def _random_topological_order(self) -> List[str]:
+    def _random_topological_order(self) -> List[int]:
         scheduled = set()
-        order: List[str] = []
+        order: List[int] = []
         while len(order) < len(self.graph.nodes):
             ready = self.graph.ready_nodes(scheduled)
             if not ready:
@@ -94,9 +98,9 @@ class SchedulingEngine:
 
     def _rollout_estimate(
         self,
-        prefix: Sequence[str],
+        prefix: Sequence[int],
         penalties: Dict[str, float],
-        evaluator: Callable[[Sequence[str]], float],
+        evaluator: Callable[[Sequence[int]], float],
         trials: int,
         exploration_noise: float,
     ) -> float:
@@ -105,16 +109,13 @@ class SchedulingEngine:
             order = self._biased_complete_order(prefix, penalties, exploration_noise)
             if len(order) != len(self.graph.nodes):
                 continue
-            score = evaluator(order)
-            scores.append(score)
+            scores.append(evaluator(order))
 
         if not scores:
             return float("inf")
         if len(scores) == 1:
             return scores[0]
-        mean = statistics.fmean(scores)
-        risk = statistics.pstdev(scores)
-        return mean + 0.35 * risk
+        return statistics.fmean(scores) + 0.35 * statistics.pstdev(scores)
 
     def greedy(self, penalties: Dict[str, float]) -> ScheduleResult:
         order = self._biased_complete_order(prefix=[], penalties=penalties, exploration_noise=0.0)
@@ -124,13 +125,13 @@ class SchedulingEngine:
         self,
         penalties: Dict[str, float],
         lookahead_depth: int,
-        evaluator: Callable[[Sequence[str]], float],
+        evaluator: Callable[[Sequence[int]], float],
     ) -> ScheduleResult:
         rollout_trials = 4
         branch_factor = 3
-        cached_scores: Dict[Tuple[str, ...], float] = {}
+        cached_scores: Dict[Tuple[int, ...], float] = {}
 
-        def recursive_score(prefix: List[str], scheduled_now: Set[str], depth: int) -> float:
+        def recursive_score(prefix: List[int], scheduled_now: Set[int], depth: int) -> float:
             key = tuple(prefix)
             if key in cached_scores and depth <= 1:
                 return cached_scores[key]
@@ -150,36 +151,27 @@ class SchedulingEngine:
             if not ready:
                 return float("inf")
 
-            ranked_ready = sorted(
-                ready,
-                key=lambda n: self._priority_score(n, penalties, len(ready)),
-            )[: max(1, branch_factor)]
-
+            ranked_ready = sorted(ready, key=lambda n: self._priority_score(n, penalties, len(ready)))[:branch_factor]
             local_scores = []
             for node_id in ranked_ready:
                 next_prefix = list(prefix)
                 next_prefix.append(node_id)
                 next_scheduled = set(scheduled_now)
                 next_scheduled.add(node_id)
-                child_score = recursive_score(next_prefix, next_scheduled, depth - 1)
-                local_scores.append(child_score)
+                local_scores.append(recursive_score(next_prefix, next_scheduled, depth - 1))
 
             score = min(local_scores) if local_scores else float("inf")
             cached_scores[key] = score
             return score
 
         scheduled = set()
-        order: List[str] = []
+        order: List[int] = []
         while len(order) < len(self.graph.nodes):
             ready = self.graph.ready_nodes(scheduled)
             if not ready:
                 break
 
-            ranked_ready = sorted(
-                ready,
-                key=lambda n: self._priority_score(n, penalties, len(ready)),
-            )[: max(1, branch_factor)]
-
+            ranked_ready = sorted(ready, key=lambda n: self._priority_score(n, penalties, len(ready)))[:branch_factor]
             candidates = []
             for node_id in ranked_ready:
                 prefix = list(order)
@@ -211,24 +203,19 @@ class SchedulingEngine:
         self,
         penalties: Dict[str, float],
         beam_width: int,
-        evaluator: Callable[[Sequence[str]], float],
+        evaluator: Callable[[Sequence[int]], float],
     ) -> ScheduleResult:
         expansion_topk = 4
-        beam: List[Tuple[List[str], Set[str], float]] = [([], set(), 0.0)]
-        total_nodes = len(self.graph.nodes)
+        beam: List[Tuple[List[int], Set[int], float]] = [([], set(), 0.0)]
 
-        for _ in range(total_nodes):
-            expanded: List[Tuple[List[str], Set[str], float]] = []
+        for _ in range(len(self.graph.nodes)):
+            expanded: List[Tuple[List[int], Set[int], float]] = []
             for prefix, scheduled, _ in beam:
                 ready = self.graph.ready_nodes(scheduled)
                 if not ready:
                     continue
 
-                ranked_ready = sorted(
-                    ready,
-                    key=lambda n: self._priority_score(n, penalties, len(ready)),
-                )[: max(1, expansion_topk)]
-
+                ranked_ready = sorted(ready, key=lambda n: self._priority_score(n, penalties, len(ready)))[:expansion_topk]
                 for node_id in ranked_ready:
                     next_prefix = list(prefix)
                     next_prefix.append(node_id)
@@ -247,11 +234,11 @@ class SchedulingEngine:
             if not expanded:
                 break
 
-            expanded.sort(key=lambda x: x[2])
-            next_beam: List[Tuple[List[str], Set[str], float]] = []
-            signatures: Set[Tuple[str, ...]] = set()
+            expanded.sort(key=lambda item: item[2])
+            next_beam: List[Tuple[List[int], Set[int], float]] = []
+            signatures: Set[Tuple[int, ...]] = set()
             for candidate in expanded:
-                prefix, _, _ = candidate
+                prefix = candidate[0]
                 signature = tuple(prefix[-3:]) if len(prefix) >= 3 else tuple(prefix)
                 if signature in signatures:
                     continue
@@ -274,10 +261,10 @@ class SchedulingEngine:
             },
         )
 
-    def _is_valid(self, order: Sequence[str]) -> bool:
+    def _is_valid(self, order: Sequence[int]) -> bool:
         return self.graph.is_valid_order(order)
 
-    def _neighbor(self, order: Sequence[str], max_tries: int = 60) -> List[str]:
+    def _neighbor(self, order: Sequence[int], max_tries: int = 60) -> List[int]:
         base = list(order)
         n = len(base)
         if n < 2:
@@ -305,8 +292,7 @@ class SchedulingEngine:
                     continue
                 left = self.rng.randrange(0, n - 2)
                 right = self.rng.randrange(left + 1, min(n, left + 4))
-                segment = proposal[left:right]
-                proposal[left:right] = reversed(segment)
+                proposal[left:right] = reversed(proposal[left:right])
 
             if self._is_valid(proposal):
                 return proposal
@@ -315,7 +301,7 @@ class SchedulingEngine:
     def simulated_annealing(
         self,
         penalties: Dict[str, float],
-        evaluator: Callable[[Sequence[str]], float],
+        evaluator: Callable[[Sequence[int]], float],
         iterations: int,
         start_temp: float,
         end_temp: float,
@@ -331,15 +317,12 @@ class SchedulingEngine:
         stagnant_steps = 0
         tabu_limit = 80
         tabu = deque()
-        tabu_set: Set[Tuple[str, ...]] = set()
+        tabu_set: Set[Tuple[int, ...]] = set()
 
         for step in range(1, iterations + 1):
             t_ratio = step / max(1, iterations)
             base_temp = start_temp * ((end_temp / start_temp) ** t_ratio)
-            if stagnant_steps > 30:
-                temp = base_temp * 1.6
-            else:
-                temp = base_temp
+            temp = base_temp * 1.6 if stagnant_steps > 30 else base_temp
 
             candidate = self._neighbor(current)
             signature = tuple(candidate)
@@ -348,7 +331,7 @@ class SchedulingEngine:
 
             candidate_score = evaluator(candidate)
             delta = candidate_score - current_score
-            accept = delta <= 0 or self.rng.random() < math.exp(-delta / max(temp, 1e-6))
+            accept = delta <= 0.0 or self.rng.random() < math.exp(-delta / max(temp, 1e-6))
 
             if accept:
                 current = candidate

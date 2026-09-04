@@ -4,10 +4,10 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Dict, Sequence
 
-from graph_builder import WorkloadGraph
+from core_types import OperatorGraph
 
 
-@dataclass
+@dataclass(slots=True)
 class MemoryReport:
     dram_access: float
     sram_reuse_loss: float
@@ -21,23 +21,27 @@ class MemoryReport:
 
 
 class MemoryHierarchy:
-    def __init__(self, config: Dict):
+    """
+    SRAM/DRAM simulation used by the classical cost model and diagnostics.
+    """
+
+    def __init__(self, config: Dict) -> None:
         self.sram_capacity = float(config.get("sram_capacity", 1024.0))
-        self.bank_count = int(config.get("sram_banks", 4))
+        self.bank_count = int(config.get("sram_banks", config.get("bank_count", 4)))
         self.eviction_idle_factor = float(config.get("eviction_idle_factor", 0.03))
         self.write_back_factor = float(config.get("write_back_factor", 1.0))
         self.prefetch_ratio = float(config.get("prefetch_ratio", 0.25))
         self.prefetch_slots = int(config.get("prefetch_slots", 2))
         self.bank_conflict_factor = float(config.get("bank_conflict_factor", 0.12))
 
-    def _bank_of(self, tensor_id: str) -> int:
-        return sum(ord(ch) for ch in tensor_id) % max(1, self.bank_count)
+    def _bank_of(self, tensor_name: str) -> int:
+        return sum(ord(ch) for ch in tensor_name) % max(1, self.bank_count)
 
-    def simulate(self, graph: WorkloadGraph, order: Sequence[str]) -> MemoryReport:
-        out_degree = {node_id: len(graph.children[node_id]) for node_id in graph.nodes}
+    def simulate(self, graph: OperatorGraph, order: Sequence[int]) -> MemoryReport:
+        out_degree = {node_id: len(graph.children_by_id[node_id]) for node_id in graph.node_by_id}
         remaining_consumers = dict(out_degree)
 
-        sram_tensors: OrderedDict[str, Dict[str, float]] = OrderedDict()
+        sram_tensors: OrderedDict[int, Dict[str, float]] = OrderedDict()
         current_usage = 0.0
         usage_integral = 0.0
 
@@ -51,9 +55,10 @@ class MemoryHierarchy:
         peak_usage = 0.0
         prefetch_credit = self.prefetch_slots
 
-        def victim_for_eviction(step: int) -> str | None:
+        def victim_for_eviction(step: int) -> int | None:
             if not sram_tensors:
                 return None
+
             scored = []
             for tensor_id, entry in sram_tensors.items():
                 rem = remaining_consumers.get(tensor_id, 0.0)
@@ -80,35 +85,35 @@ class MemoryHierarchy:
                 sram_violations += 1.0
 
         for step, node_id in enumerate(order):
-            node = graph.nodes[node_id]
+            node = graph.node_by_id[node_id]
             bank_reads: Dict[int, int] = {}
 
             if not node.dependencies:
-                root_fetch = node.input_size * (1.0 - self.prefetch_ratio * 0.6)
+                root_fetch = node.input_bytes * (1.0 - self.prefetch_ratio * 0.6)
                 dram_access += root_fetch
-                prefetch_bytes_saved += node.input_size - root_fetch
+                prefetch_bytes_saved += node.input_bytes - root_fetch
 
-            for dep in node.dependencies:
-                dep_node = graph.nodes[dep]
-                bank = self._bank_of(dep)
+            for dep_id in node.dependencies:
+                dep = graph.node_by_id[dep_id]
+                bank = self._bank_of(dep.name)
                 bank_reads[bank] = bank_reads.get(bank, 0) + 1
 
-                if dep in sram_tensors:
-                    sram_tensors[dep]["last_access"] = float(step)
-                    sram_tensors.move_to_end(dep)
+                if dep_id in sram_tensors:
+                    sram_tensors[dep_id]["last_access"] = float(step)
+                    sram_tensors.move_to_end(dep_id)
                 else:
-                    fetch_bytes = dep_node.output_size
+                    fetch_bytes = dep.output_bytes
                     if prefetch_credit > 0:
                         saved = fetch_bytes * self.prefetch_ratio
                         fetch_bytes -= saved
                         prefetch_bytes_saved += saved
                         prefetch_credit -= 1
                     dram_access += fetch_bytes
-                    reuse_loss += dep_node.output_size * 0.11
+                    reuse_loss += dep.output_bytes * 0.11
 
-                remaining_consumers[dep] = max(0.0, remaining_consumers[dep] - 1.0)
-                if remaining_consumers[dep] == 0 and dep in sram_tensors:
-                    current_usage -= sram_tensors.pop(dep)["size"]
+                remaining_consumers[dep_id] = max(0.0, remaining_consumers.get(dep_id, 0.0) - 1.0)
+                if remaining_consumers[dep_id] == 0 and dep_id in sram_tensors:
+                    current_usage -= sram_tensors.pop(dep_id)["size"]
 
             for reads in bank_reads.values():
                 if reads > 1:
@@ -116,21 +121,21 @@ class MemoryHierarchy:
 
             prefetch_credit = min(self.prefetch_slots, prefetch_credit + 1)
 
-            if node.output_size <= self.sram_capacity:
-                evict_until(node.output_size, step)
-                if current_usage + node.output_size <= self.sram_capacity:
+            if node.output_bytes <= self.sram_capacity:
+                evict_until(node.output_bytes, step)
+                if current_usage + node.output_bytes <= self.sram_capacity:
                     sram_tensors[node_id] = {
-                        "size": float(node.output_size),
-                        "bank": float(self._bank_of(node_id)),
+                        "size": float(node.output_bytes),
+                        "bank": float(self._bank_of(node.name)),
                         "last_access": float(step),
                     }
-                    current_usage += node.output_size
+                    current_usage += node.output_bytes
                     peak_usage = max(peak_usage, current_usage)
                 else:
-                    dram_access += node.output_size * self.write_back_factor
+                    dram_access += node.output_bytes * self.write_back_factor
                     spill_count += 1.0
             else:
-                dram_access += node.output_size * self.write_back_factor
+                dram_access += node.output_bytes * self.write_back_factor
                 spill_count += 1.0
                 sram_violations += 1.0
 

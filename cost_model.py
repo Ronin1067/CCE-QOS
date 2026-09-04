@@ -4,12 +4,12 @@ from dataclasses import asdict, dataclass
 from typing import Dict, Sequence
 
 from bandwidth_estimator import BandwidthEstimator
+from core_types import OperatorGraph
 from fusion_logic import FusionLogic
-from graph_builder import WorkloadGraph
 from memory_hierarchy import MemoryHierarchy
 
 
-@dataclass
+@dataclass(slots=True)
 class CostBreakdown:
     dram_access: float
     sram_reuse_loss: float
@@ -22,13 +22,17 @@ class CostBreakdown:
 
 
 class ScheduleCostModel:
+    """
+    Classical cost objective used as baseline and as one component in hybrid scoring.
+    """
+
     def __init__(
         self,
         memory_hierarchy: MemoryHierarchy,
         bandwidth_estimator: BandwidthEstimator,
         fusion_logic: FusionLogic,
-        weights: Dict,
-    ):
+        weights: Dict[str, float],
+    ) -> None:
         self.memory_hierarchy = memory_hierarchy
         self.bandwidth_estimator = bandwidth_estimator
         self.fusion_logic = fusion_logic
@@ -41,15 +45,15 @@ class ScheduleCostModel:
             "parallelism_loss": float(weights.get("parallelism_loss", 1.0)),
         }
 
-    def _parallelism_loss(self, graph: WorkloadGraph, order: Sequence[str], critical_path: Dict[str, float]) -> float:
+    def _parallelism_loss(self, graph: OperatorGraph, order: Sequence[int], critical_path: Dict[int, float]) -> float:
         cp_scale = max(1.0, max(critical_path.values()))
-
         scheduled = set()
         loss = 0.0
+
         for node_id in order:
             ready = graph.ready_nodes(scheduled)
-            node = graph.nodes[node_id]
-            local_frontier = len(ready)
+            node = graph.node_by_id[node_id]
+            frontier = len(ready)
             node_cp = critical_path[node_id]
 
             if ready:
@@ -58,8 +62,8 @@ class ScheduleCostModel:
             else:
                 slack = 0.0
 
-            if local_frontier > 1:
-                serialization = ((local_frontier - 1) / local_frontier) * node.compute_cycles
+            if frontier > 1:
+                serialization = ((frontier - 1) / frontier) * node.compute_cycles
                 loss += serialization + 0.25 * slack * node.compute_cycles
             else:
                 loss += 0.1 * slack * node.compute_cycles
@@ -69,8 +73,8 @@ class ScheduleCostModel:
 
     def evaluate(
         self,
-        graph: WorkloadGraph,
-        order: Sequence[str],
+        graph: OperatorGraph,
+        order: Sequence[int],
         penalties: Dict[str, float] | None = None,
     ) -> Dict:
         if not graph.is_valid_order(order):
@@ -125,7 +129,7 @@ class ScheduleCostModel:
         fusion_term = self.weights["fusion_gain"] * fusion_report.fusion_gain
         parallel_term = self.weights["parallelism_loss"] * parallelism_loss
 
-        output_mass = sum(graph.nodes[n].output_size for n in order)
+        output_mass = sum(graph.node_by_id[n].output_bytes for n in order)
         violation_rate = {
             "sram_capacity": memory_report.violations.get("sram_capacity", 0.0) / max(1.0, len(order)),
             "bandwidth_capacity": bandwidth_report.violations.get("bandwidth_capacity", 0.0) / max(1.0, len(order)),
@@ -147,8 +151,8 @@ class ScheduleCostModel:
         )
 
         total_cost = raw_total + penalty_cost
-
         positive_total = max(1.0, dram_term + reuse_term + bw_term + stall_term + parallel_term)
+
         cost_impact = {
             "sram_capacity": (reuse_term + 0.4 * memory_report.spill_count) / positive_total,
             "bandwidth_capacity": (bw_term + stall_term) / positive_total,
@@ -165,7 +169,7 @@ class ScheduleCostModel:
         )
         feasibility = max(0.0, 1.0 - violation_mass / max(1.0, len(order)))
         latency = (
-            sum(graph.nodes[node_id].compute_cycles for node_id in order)
+            sum(graph.node_by_id[node_id].compute_cycles for node_id in order)
             + bandwidth_report.pipeline_stalls
             + memory_report.idle_cycles
             + 0.15 * bandwidth_report.backlog_pressure
@@ -181,7 +185,6 @@ class ScheduleCostModel:
             penalty_cost=penalty_cost,
             total_cost=total_cost,
         )
-
         return {
             "breakdown": asdict(breakdown),
             "memory": asdict(memory_report),

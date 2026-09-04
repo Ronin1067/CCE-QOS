@@ -1,223 +1,171 @@
 from __future__ import annotations
 
-import math
 import random
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Sequence
 
-from graph_builder import WorkloadGraph
-from penalty_tuner import AdaptivePenaltyRefinement
+from core_types import HardwareConfig, OperatorGraph
+from energy_model import EnergyModel
+from qubo_types import QUBOData
 
 
-@dataclass
-class QuantumResult:
-    strategy: str
-    order: List[str]
-    score: float
-    metadata: Dict
+@dataclass(slots=True)
+class ProblemSpec:
+    """
+    Quantum-backend input contract.
+    """
+
+    graph: OperatorGraph
+    hardware: HardwareConfig
+    alpha: Dict[str, float]
+    beta: Dict[str, float]
+    gamma: Dict[str, float]
+    penalties: Dict[str, float]
+
+
+def build_qubo(problem_spec: ProblemSpec) -> QUBOData:
+    """
+    Build the canonical CCE-QUBO consumed by classical/quantum solvers.
+    """
+    model = EnergyModel(
+        graph=problem_spec.graph,
+        hw=problem_spec.hardware,
+        alpha=problem_spec.alpha,
+        beta=problem_spec.beta,
+        gamma=problem_spec.gamma,
+        initial_penalties=problem_spec.penalties,
+    )
+    return model.build_qubo()
+
+
+def qubo_energy(qubo_data: QUBOData, bits: Sequence[int]) -> float:
+    """
+    Evaluate E(z) = const + sum_i a_i z_i + sum_{i<=j} b_ij z_i z_j
+    for a binary assignment `bits`.
+    """
+    if len(bits) != qubo_data.num_variables:
+        raise ValueError("Bitstring length does not match QUBO variable count.")
+
+    energy = float(qubo_data.constant)
+    for idx, coeff in qubo_data.linear.items():
+        energy += float(coeff) * int(bits[idx])
+    for (i, j), coeff in qubo_data.quadratic.items():
+        energy += float(coeff) * int(bits[i]) * int(bits[j])
+    return energy
+
+
+def _decode_schedule_projection(qubo_data: QUBOData, bits: Sequence[int]) -> List[int]:
+    """
+    Recover a coarse schedule order from active x_{i,t,r} variables:
+    sort by time, then op id; keep first occurrence per op.
+    """
+    active_x: List[tuple[int, int, str]] = []
+    for idx, meta in qubo_data.var_metadata.items():
+        if int(bits[idx]) != 1:
+            continue
+        if meta.get("kind") != "x":
+            continue
+        op = int(meta["op"])
+        t = int(meta["t"])
+        r = str(meta["r"])
+        active_x.append((t, op, r))
+
+    active_x.sort(key=lambda item: (item[0], item[1], item[2]))
+    seen = set()
+    order: List[int] = []
+    for _, op, _ in active_x:
+        if op in seen:
+            continue
+        seen.add(op)
+        order.append(op)
+    return order
+
+
+def run_qaoa_stub(
+    qubo_data: QUBOData,
+    num_samples: int = 64,
+    num_steps: int = 220,
+    seed: int = 101,
+) -> List[Dict[str, Any]]:
+    """
+    Simple optimizer stub that mimics a QAOA candidate-generation surface.
+
+    It performs multi-start stochastic bit-flip search directly on QUBO energy
+    and returns best candidate assignments in a quantum-backend-friendly shape.
+    """
+    rng = random.Random(seed)
+    n = qubo_data.num_variables
+    if n <= 0:
+        return []
+
+    starts = max(4, min(num_samples, 16))
+    pool: List[List[int]] = [[rng.randint(0, 1) for _ in range(n)] for _ in range(starts)]
+    pool_energy = [qubo_energy(qubo_data, bits) for bits in pool]
+
+    best_seen: Dict[str, float] = {}
+    for walk_idx in range(starts):
+        bits = list(pool[walk_idx])
+        energy = pool_energy[walk_idx]
+
+        for step in range(max(1, num_steps)):
+            temp = max(0.01, 1.5 * (1.0 - step / max(1, num_steps)))
+            k = rng.randint(1, 3)
+            flip_indices = rng.sample(range(n), k=k)
+
+            proposal = list(bits)
+            for fidx in flip_indices:
+                proposal[fidx] = 1 - proposal[fidx]
+
+            p_energy = qubo_energy(qubo_data, proposal)
+            delta = p_energy - energy
+            accept = delta <= 0.0 or rng.random() < pow(2.718281828, -delta / temp)
+            if accept:
+                bits = proposal
+                energy = p_energy
+
+        bitstring = "".join("1" if b else "0" for b in bits)
+        prev = best_seen.get(bitstring)
+        if prev is None or energy < prev:
+            best_seen[bitstring] = energy
+
+    ranked = sorted(best_seen.items(), key=lambda item: item[1])[: max(1, num_samples)]
+    results: List[Dict[str, Any]] = []
+    for rank, (bitstring, energy) in enumerate(ranked, start=1):
+        bits = [1 if ch == "1" else 0 for ch in bitstring]
+        active = [idx for idx, b in enumerate(bits) if b == 1]
+        results.append(
+            {
+                "rank": rank,
+                "energy": float(energy),
+                "bitstring": bitstring,
+                "active_variables": active,
+                "schedule_projection": _decode_schedule_projection(qubo_data, bits),
+                "backend": "qaoa_stub_local_search",
+            }
+        )
+    return results
 
 
 class QuantumInterface:
-    def __init__(self, graph: WorkloadGraph, random_seed: int = 101):
-        self.graph = graph
-        self.rng = random.Random(random_seed)
+    """
+    Thin OO wrapper around the required functional API.
+    """
 
-    def _valid(self, order: Sequence[str]) -> bool:
-        return self.graph.is_valid_order(order)
+    def __init__(self, seed: int = 101) -> None:
+        self.seed = int(seed)
 
-    def _sample_neighbor(self, order: Sequence[str], exploration: float) -> List[str]:
-        base = list(order)
-        n = len(base)
-        tries = max(14, int(65 * exploration))
-        for _ in range(tries):
-            move = self.rng.choice(["swap", "insert", "block"])
-            proposal = list(base)
+    def build_qubo(self, problem_spec: ProblemSpec) -> QUBOData:
+        return build_qubo(problem_spec)
 
-            if move == "swap":
-                i = self.rng.randrange(0, n)
-                j = self.rng.randrange(0, n)
-                if i == j:
-                    continue
-                proposal[i], proposal[j] = proposal[j], proposal[i]
-            elif move == "insert":
-                i = self.rng.randrange(0, n)
-                j = self.rng.randrange(0, n)
-                if i == j:
-                    continue
-                value = proposal.pop(i)
-                proposal.insert(j, value)
-            else:
-                if n < 4:
-                    continue
-                left = self.rng.randrange(0, n - 2)
-                right = self.rng.randrange(left + 1, min(n, left + 5))
-                proposal[left:right] = reversed(proposal[left:right])
-
-            if self._valid(proposal):
-                return proposal
-        return base
-
-    def _objective(
+    def run_qaoa_stub(
         self,
-        order: Sequence[str],
-        evaluator: Callable[[Sequence[str], Dict[str, float] | None], Dict],
-        objective_from_evaluation: Callable[[Dict], float],
-        penalties: Dict[str, float] | None,
-    ) -> Tuple[float, Dict]:
-        if not self._valid(order):
-            return float("inf"), {
-                "breakdown": {"total_cost": float("inf")},
-                "feasibility": 0.0,
-                "latency_cycles": float("inf"),
-            }
-        eval_report = evaluator(order, penalties)
-        objective = float(objective_from_evaluation(eval_report))
-        return objective, eval_report
-
-    def qaoa_refine(
-        self,
-        seed_order: Sequence[str],
-        evaluator: Callable[[Sequence[str], Dict[str, float] | None], Dict],
-        objective_from_evaluation: Callable[[Dict], float] | None = None,
-        penalties: Dict[str, float] | None = None,
-        layers: int = 2,
-        iterations: int = 80,
-        walkers: int = 6,
-    ) -> QuantumResult:
-        objective_from_evaluation = objective_from_evaluation or (lambda report: report["breakdown"]["total_cost"])
-        layers = max(1, layers)
-        walkers = max(2, walkers)
-
-        gamma = [self.rng.uniform(0.3, 1.2) for _ in range(layers)]
-        beta = [self.rng.uniform(0.2, 1.0) for _ in range(layers)]
-
-        chains = [list(seed_order)]
-        for _ in range(walkers - 1):
-            chains.append(self._sample_neighbor(seed_order, exploration=1.1))
-
-        chain_energy = []
-        chain_eval = []
-        for order in chains:
-            e, rep = self._objective(order, evaluator, objective_from_evaluation, penalties)
-            chain_energy.append(e)
-            chain_eval.append(rep)
-
-        best_idx = min(range(len(chains)), key=lambda i: chain_energy[i])
-        best_order = list(chains[best_idx])
-        best_energy = chain_energy[best_idx]
-        best_eval = chain_eval[best_idx]
-        accepted = 0
-        moves = 0
-
-        for step in range(iterations):
-            layer = step % layers
-            local_accept = 0
-
-            for w in range(walkers):
-                moves += 1
-                base_order = chains[w]
-                exploration = max(0.2, min(2.4, 1.2 + beta[layer] - 0.55 * gamma[layer]))
-                proposal = self._sample_neighbor(base_order, exploration)
-                prop_energy, prop_eval = self._objective(proposal, evaluator, objective_from_evaluation, penalties)
-
-                delta = prop_energy - chain_energy[w]
-                temp = max(0.04, gamma[layer])
-                accept_prob = 1.0 if delta <= 0 else math.exp(-delta / temp)
-                if self.rng.random() < accept_prob:
-                    chains[w] = proposal
-                    chain_energy[w] = prop_energy
-                    chain_eval[w] = prop_eval
-                    accepted += 1
-                    local_accept += 1
-
-                if chain_energy[w] < best_energy:
-                    best_energy = chain_energy[w]
-                    best_order = list(chains[w])
-                    best_eval = chain_eval[w]
-
-            accept_ratio = local_accept / max(1, walkers)
-            gamma[layer] = max(0.05, min(2.0, gamma[layer] * (0.97 + 0.06 * (1.0 - accept_ratio))))
-            beta[layer] = max(0.05, min(2.0, beta[layer] * (0.95 + 0.08 * accept_ratio)))
-
-        return QuantumResult(
-            strategy="Quantum (QAOA)",
-            order=best_order,
-            score=best_energy,
-            metadata={
-                "layers": layers,
-                "iterations": iterations,
-                "walkers": walkers,
-                "acceptance_ratio": accepted / max(1, moves),
-                "backend": "qaoa_style_multiwalker_simulator",
-                "final_gamma": gamma,
-                "final_beta": beta,
-                "best_objective": best_energy,
-                "best_cost": best_eval["breakdown"]["total_cost"],
-                "final_breakdown": best_eval["breakdown"],
-            },
-        )
-
-    def qaoa_with_apr(
-        self,
-        seed_order: Sequence[str],
-        evaluator: Callable[[Sequence[str], Dict[str, float] | None], Dict],
-        apr: AdaptivePenaltyRefinement,
-        objective_from_evaluation: Callable[[Dict], float] | None = None,
-        rounds: int = 4,
-        layers: int = 2,
-        iterations_per_round: int = 55,
-        walkers: int = 6,
-    ) -> QuantumResult:
-        objective_from_evaluation = objective_from_evaluation or (lambda report: report["breakdown"]["total_cost"])
-        order = list(seed_order)
-        best_order = list(seed_order)
-        best_objective = float("inf")
-        round_trace = []
-
-        for idx in range(rounds):
-            penalties = apr.get()
-            adaptive_iters = int(iterations_per_round * (1.0 + 0.15 * idx))
-            round_result = self.qaoa_refine(
-                seed_order=order,
-                evaluator=evaluator,
-                objective_from_evaluation=objective_from_evaluation,
-                penalties=penalties,
-                layers=layers,
-                iterations=adaptive_iters,
-                walkers=walkers,
-            )
-            round_eval = evaluator(round_result.order, penalties)
-            objective_score = float(objective_from_evaluation(round_eval))
-            cost_score = float(round_eval["breakdown"]["total_cost"])
-            order = list(round_result.order)
-
-            apr_state = apr.update(round_eval["violation_rate"], round_eval["cost_impact"])
-            round_trace.append(
-                {
-                    "round": idx + 1,
-                    "objective_score": objective_score,
-                    "cost_score": cost_score,
-                    "feasibility": round_eval.get("feasibility", 0.0),
-                    "penalties": apr_state.penalties,
-                    "apr_signal": apr_state.signal_snapshot,
-                    "violation_rate": round_eval["violation_rate"],
-                }
-            )
-            if objective_score < best_objective:
-                best_objective = objective_score
-                best_order = list(round_result.order)
-
-        return QuantumResult(
-            strategy="Quantum + APR",
-            order=best_order,
-            score=best_objective,
-            metadata={
-                "backend": "qaoa_style_multiwalker_simulator",
-                "rounds": rounds,
-                "layers": layers,
-                "walkers": walkers,
-                "round_trace": round_trace,
-                "final_penalties": apr.get(),
-                "best_objective": best_objective,
-            },
+        qubo_data: QUBOData,
+        num_samples: int = 64,
+        num_steps: int = 220,
+    ) -> List[Dict[str, Any]]:
+        return run_qaoa_stub(
+            qubo_data=qubo_data,
+            num_samples=num_samples,
+            num_steps=num_steps,
+            seed=self.seed,
         )

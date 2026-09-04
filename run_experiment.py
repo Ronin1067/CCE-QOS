@@ -1,533 +1,438 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
-from typing import Callable, Dict, Sequence, Tuple
+from typing import Any, Dict, Mapping, Sequence, Tuple
 
 from bandwidth_estimator import BandwidthEstimator
+from core_types import HardwareConfig, OperatorGraph
 from cost_model import ScheduleCostModel
-from energy_model import EnergyScheduleModel
 from fusion_logic import FusionLogic
-from graph_builder import WorkloadGraph, load_workload
+from graph_builder import load_hardware_config, load_operator_graph
 from memory_hierarchy import MemoryHierarchy
-from penalty_tuner import AdaptivePenaltyRefinement
-from quantum_interface import QuantumInterface
+from penalty_tuner import PenaltyTuner
+from quantum_interface import ProblemSpec, build_qubo, qubo_energy, run_qaoa_stub
+from qubo_types import QUBOData
 from schedule_analysis import ScheduleAnalysis
 from schedule_explainer import ScheduleExplainer
 from scheduling_engine import ScheduleResult, SchedulingEngine
 
-ObjectiveFromEvaluation = Callable[[Dict], float]
-OrderEvaluator = Callable[[Sequence[str], Dict[str, float] | None], Dict]
 
-
-def load_config(path: Path) -> Dict:
-    raw_text = path.read_text(encoding="utf-8")
+def load_config(path: Path) -> Dict[str, Any]:
+    raw = path.read_text(encoding="utf-8")
     try:
-        return json.loads(raw_text)
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("Configuration root must be an object.")
+        return parsed
     except json.JSONDecodeError:
         try:
             import yaml  # type: ignore
         except ImportError as exc:
-            raise RuntimeError(
-                "config.yaml uses non-JSON YAML syntax but PyYAML is not installed. "
-                "Either install 'pyyaml' or keep config.yaml JSON-compatible."
-            ) from exc
-        loaded = yaml.safe_load(raw_text)
-        if not isinstance(loaded, dict):
-            raise ValueError("Configuration root must be a mapping/object.")
-        return loaded
+            raise RuntimeError("Install PyYAML or keep config JSON-compatible.") from exc
+        parsed = yaml.safe_load(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("Configuration root must be an object.")
+        return parsed
 
 
-def objective_cost(evaluation: Dict) -> float:
-    return float(evaluation["breakdown"]["total_cost"])
+def _derive_weights(config: Mapping[str, Any]) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float]]:
+    energy = dict(config.get("energy_weights", {}))
+    alpha = dict(config.get("alpha", {}))
+    beta = dict(config.get("beta", {}))
+    gamma = dict(config.get("gamma", {}))
+    return (
+        {
+            "comp": float(alpha.get("comp", energy.get("unary_cost", 1.0))),
+            "energy": float(alpha.get("energy", 1.0)),
+            "lat": float(alpha.get("lat", 0.25)),
+            "dvfs": float(alpha.get("dvfs", 0.2)),
+        },
+        {
+            "reuse": float(beta.get("reuse", energy.get("data_reuse_reward", 1.0))),
+            "fuse": float(beta.get("fuse", energy.get("fusion_reward", 1.0))),
+            "bw": float(beta.get("bw", energy.get("bandwidth_spike_penalty", 1.0))),
+        },
+        {
+            "bank": float(gamma.get("bank", energy.get("memory_conflict_penalty", 0.8))),
+            "burst": float(gamma.get("burst", 0.6)),
+            "stall": float(gamma.get("stall", 0.4)),
+            "parallelism": float(gamma.get("parallelism", 0.3)),
+        },
+    )
 
 
-def objective_energy(evaluation: Dict) -> float:
-    return float(evaluation.get("energy_breakdown", {}).get("total_energy", evaluation["breakdown"]["total_cost"]))
+def _map_penalties_to_qubo(p: Mapping[str, float]) -> Dict[str, float]:
+    return {
+        "unique_exec": float(p.get("unique_exec", p.get("dependency_conflict", 1.0) * 1.6)),
+        "dep": float(p.get("dep", p.get("dependency_conflict", 1.0))),
+        "dvfs_one_hot": float(p.get("dvfs_one_hot", p.get("bandwidth_capacity", 1.0) * 0.6)),
+        "mem_cap": float(p.get("mem_cap", p.get("sram_capacity", 1.0))),
+        "mem_bind": float(p.get("mem_bind", p.get("sram_capacity", 1.0))),
+    }
 
 
-def rank_score(evaluation: Dict, objective_from_evaluation: ObjectiveFromEvaluation) -> float:
-    objective = objective_from_evaluation(evaluation)
+def _complete_order(order: Sequence[int], graph: OperatorGraph) -> list[int]:
+    seen = set()
+    candidate = []
+    for x in order:
+        node_id = int(x)
+        if node_id in seen or node_id not in graph.node_by_id:
+            continue
+        seen.add(node_id)
+        candidate.append(node_id)
+
+    final: list[int] = []
+    scheduled = set()
+    pending = list(candidate)
+    while pending:
+        changed = False
+        rest = []
+        for node_id in pending:
+            deps = graph.node_by_id[node_id].dependencies
+            if all(dep in scheduled for dep in deps):
+                final.append(node_id)
+                scheduled.add(node_id)
+                changed = True
+            else:
+                rest.append(node_id)
+        pending = rest
+        if not changed:
+            break
+
+    while len(final) < len(graph.nodes):
+        ready = [n for n in graph.ready_nodes(scheduled) if n not in scheduled]
+        if not ready:
+            break
+        chosen = ready[0]
+        final.append(chosen)
+        scheduled.add(chosen)
+    return final
+
+
+class CCEEvaluator:
+    def __init__(
+        self,
+        graph: OperatorGraph,
+        hardware: HardwareConfig,
+        cost_model: ScheduleCostModel,
+        alpha: Dict[str, float],
+        beta: Dict[str, float],
+        gamma: Dict[str, float],
+        base_penalties: Dict[str, float],
+    ) -> None:
+        self.graph = graph
+        self.hardware = hardware
+        self.cost_model = cost_model
+        self.alpha = dict(alpha)
+        self.beta = dict(beta)
+        self.gamma = dict(gamma)
+        self.base_penalties = dict(base_penalties)
+        self._cache: Dict[Tuple[Any, ...], QUBOData] = {}
+
+    def _qubo(self, penalties: Dict[str, float], ablation: str | None) -> QUBOData:
+        beta = dict(self.beta)
+        gamma = dict(self.gamma)
+        if ablation == "remove_pairwise":
+            beta = {k: 0.0 for k in beta}
+        if ablation == "remove_higher_order":
+            gamma = {k: 0.0 for k in gamma}
+        key = (
+            tuple(sorted(_map_penalties_to_qubo(penalties).items())),
+            tuple(sorted(beta.items())),
+            tuple(sorted(gamma.items())),
+        )
+        if key in self._cache:
+            return self._cache[key]
+        spec = ProblemSpec(
+            graph=self.graph,
+            hardware=self.hardware,
+            alpha=self.alpha,
+            beta=beta,
+            gamma=gamma,
+            penalties=_map_penalties_to_qubo(penalties),
+        )
+        qubo = build_qubo(spec)
+        self._cache[key] = qubo
+        return qubo
+
+    def _encode(self, order: Sequence[int], qubo: QUBOData) -> list[int]:
+        bits = [0] * qubo.num_variables
+        x_lookup: Dict[Tuple[int, int, str], int] = {}
+        x_fallback: Dict[int, int] = {}
+        m_lookup: Dict[Tuple[int, str], int] = {}
+        m_fallback: Dict[int, int] = {}
+        f_lookup: Dict[Tuple[int, str], int] = {}
+        f_fallback: Dict[int, int] = {}
+
+        for idx, meta in qubo.var_metadata.items():
+            kind = meta.get("kind")
+            if kind == "x":
+                op = int(meta["op"])
+                x_lookup[(op, int(meta["t"]), str(meta["r"]))] = idx
+                x_fallback.setdefault(op, idx)
+            elif kind == "m":
+                op = int(meta["op"])
+                m_lookup[(op, str(meta["level"]))] = idx
+                m_fallback.setdefault(op, idx)
+            elif kind == "f":
+                t = int(meta["t"])
+                f_lookup[(t, str(meta["state"]))] = idx
+                f_fallback.setdefault(t, idx)
+
+        primary_r = self.hardware.resources[0] if self.hardware.resources else ""
+        levels = [lv.name for lv in self.hardware.memory_levels]
+        level = "L2" if "L2" in levels else (levels[0] if levels else "")
+        states = [s.name for s in self.hardware.dvfs_states]
+        state = "nominal" if "nominal" in states else (states[0] if states else "")
+
+        for pos, op in enumerate(order):
+            t = min(pos, self.hardware.max_time_slots - 1)
+            x = x_lookup.get((int(op), t, primary_r), x_fallback.get(int(op)))
+            m = m_lookup.get((int(op), level), m_fallback.get(int(op)))
+            if x is not None:
+                bits[x] = 1
+            if m is not None:
+                bits[m] = 1
+        for t in range(self.hardware.max_time_slots):
+            f = f_lookup.get((t, state), f_fallback.get(t))
+            if f is not None:
+                bits[f] = 1
+        return bits
+
+    def evaluate(self, order: Sequence[int], penalties: Dict[str, float], ablation: str | None = None) -> Dict[str, Any]:
+        valid_order = _complete_order(order, self.graph)
+        qubo = self._qubo(penalties, ablation)
+        bits = self._encode(valid_order, qubo)
+        linear = sum(float(c) * bits[i] for i, c in qubo.linear.items())
+        quadratic = sum(float(c) * bits[i] * bits[j] for (i, j), c in qubo.quadratic.items())
+        total = float(qubo.constant) + linear + quadratic
+        base = self.cost_model.evaluate(self.graph, valid_order, penalties=penalties)
+        out = dict(base)
+        out["energy_breakdown"] = {
+            "unary_cost": linear,
+            "pairwise_total": quadratic,
+            "constant": float(qubo.constant),
+            "total_energy": total,
+        }
+        out["qubo_snapshot"] = {
+            "num_variables": qubo.num_variables,
+            "linear_terms": len(qubo.linear),
+            "quadratic_terms": len(qubo.quadratic),
+            "active_bits": int(sum(bits)),
+            "ablation": ablation or "none",
+        }
+        return out
+
+    def build_qubo_data(self, penalties: Dict[str, float], ablation: str | None = None) -> QUBOData:
+        return self._qubo(penalties, ablation)
+
+
+def _rank(evaluation: Dict[str, Any], objective: float) -> float:
     return objective - 120.0 * float(evaluation.get("feasibility", 0.0))
 
 
-def select_best_result(
+def _run_trials(
+    graph: OperatorGraph,
     trials: int,
-    base_seed: int,
-    builder: Callable[[int], ScheduleResult],
-    evaluate_with_penalties: Callable[[Sequence[str]], Dict],
-    objective_from_evaluation: ObjectiveFromEvaluation,
-) -> Tuple[ScheduleResult, Dict]:
-    best_result: ScheduleResult | None = None
-    best_eval: Dict | None = None
+    seed: int,
+    builder,
+    evaluate,
+    objective_fn,
+) -> Tuple[ScheduleResult, Dict[str, Any]]:
+    best_result = None
+    best_eval = None
     best_rank = float("inf")
-    trial_log = []
-
     for idx in range(trials):
-        seed = base_seed + idx * 37
-        result = builder(seed)
-        evaluation = evaluate_with_penalties(result.order)
-        objective = objective_from_evaluation(evaluation)
-        score = rank_score(evaluation, objective_from_evaluation)
-        trial_log.append(
-            {
-                "trial": idx + 1,
-                "seed": seed,
-                "rank_score": score,
-                "objective": objective,
-                "cost": evaluation["breakdown"]["total_cost"],
-                "feasibility": evaluation["feasibility"],
-            }
-        )
-        if score < best_rank:
-            best_rank = score
+        engine = SchedulingEngine(graph, random_seed=seed + idx * 37)
+        result = builder(engine)
+        order = _complete_order(result.order, graph)
+        evaluation = evaluate(order)
+        objective = float(objective_fn(evaluation))
+        rank = _rank(evaluation, objective)
+        if rank < best_rank:
+            best_rank = rank
+            result.order = order
+            result.score = objective
             best_result = result
             best_eval = evaluation
-
     if best_result is None or best_eval is None:
-        raise RuntimeError("No trial produced a valid schedule result.")
-
-    best_result.metadata = dict(best_result.metadata)
-    best_result.metadata["trials"] = trial_log
-    best_result.metadata["selected_rank_score"] = best_rank
-    best_result.metadata["selected_objective"] = objective_from_evaluation(best_eval)
+        raise RuntimeError("No valid schedule found.")
     return best_result, best_eval
 
 
-def run_strategy_suite(
-    graph: WorkloadGraph,
-    config: Dict,
-    evaluate: OrderEvaluator,
-    objective_from_evaluation: ObjectiveFromEvaluation,
-    objective_name: str,
-) -> Dict[str, Dict]:
-    base_seed = int(config["experiment"]["seed"])
-    search_trials = int(config["experiment"].get("search_trials", 2))
-    quantum_trials = int(config["experiment"].get("quantum_trials", 2))
-
-    initial_penalties = dict(config["apr"]["initial_penalties"])
-    baseline_penalties = dict(initial_penalties)
-
-    def greedy_builder(seed: int) -> ScheduleResult:
-        scheduler = SchedulingEngine(graph=graph, random_seed=seed)
-        return scheduler.greedy(penalties=baseline_penalties)
-
-    greedy, greedy_eval = select_best_result(
-        trials=search_trials,
-        base_seed=base_seed + 11,
-        builder=greedy_builder,
-        evaluate_with_penalties=lambda order: evaluate(order, baseline_penalties),
-        objective_from_evaluation=objective_from_evaluation,
-    )
-
-    def lookahead_builder(seed: int) -> ScheduleResult:
-        scheduler = SchedulingEngine(graph=graph, random_seed=seed)
-        return scheduler.lookahead(
-            penalties=baseline_penalties,
-            lookahead_depth=int(config["search"]["lookahead_depth"]),
-            evaluator=lambda order: objective_from_evaluation(evaluate(order, baseline_penalties)),
-        )
-
-    lookahead, lookahead_eval = select_best_result(
-        trials=search_trials,
-        base_seed=base_seed + 67,
-        builder=lookahead_builder,
-        evaluate_with_penalties=lambda order: evaluate(order, baseline_penalties),
-        objective_from_evaluation=objective_from_evaluation,
-    )
-
-    def beam_builder(seed: int) -> ScheduleResult:
-        scheduler = SchedulingEngine(graph=graph, random_seed=seed)
-        return scheduler.beam_search(
-            penalties=baseline_penalties,
-            beam_width=int(config["search"]["beam_width"]),
-            evaluator=lambda order: objective_from_evaluation(evaluate(order, baseline_penalties)),
-        )
-
-    beam, beam_eval = select_best_result(
-        trials=search_trials,
-        base_seed=base_seed + 101,
-        builder=beam_builder,
-        evaluate_with_penalties=lambda order: evaluate(order, baseline_penalties),
-        objective_from_evaluation=objective_from_evaluation,
-    )
-
-    def anneal_builder(seed: int) -> ScheduleResult:
-        scheduler = SchedulingEngine(graph=graph, random_seed=seed)
-        return scheduler.simulated_annealing(
-            penalties=baseline_penalties,
-            evaluator=lambda order: objective_from_evaluation(evaluate(order, baseline_penalties)),
-            iterations=int(config["search"]["annealing_iterations"]),
-            start_temp=float(config["search"]["annealing_start_temp"]),
-            end_temp=float(config["search"]["annealing_end_temp"]),
-        )
-
-    anneal, anneal_eval = select_best_result(
-        trials=search_trials,
-        base_seed=base_seed + 149,
-        builder=anneal_builder,
-        evaluate_with_penalties=lambda order: evaluate(order, baseline_penalties),
-        objective_from_evaluation=objective_from_evaluation,
-    )
-
-    def quantum_builder(seed: int) -> ScheduleResult:
-        q = QuantumInterface(graph=graph, random_seed=seed)
-        q_result = q.qaoa_refine(
-            seed_order=anneal.order,
-            evaluator=evaluate,
-            objective_from_evaluation=objective_from_evaluation,
-            penalties=baseline_penalties,
-            layers=int(config["quantum"]["layers"]),
-            iterations=int(config["quantum"]["iterations"]),
-            walkers=int(config["quantum"].get("walkers", 6)),
-        )
-        return ScheduleResult(
-            strategy=q_result.strategy,
-            order=q_result.order,
-            score=q_result.score,
-            metadata=q_result.metadata,
-        )
-
-    quantum_baseline, quantum_eval = select_best_result(
-        trials=quantum_trials,
-        base_seed=base_seed + 191,
-        builder=quantum_builder,
-        evaluate_with_penalties=lambda order: evaluate(order, baseline_penalties),
-        objective_from_evaluation=objective_from_evaluation,
-    )
-
-    apr_warm = AdaptivePenaltyRefinement(initial_penalties=initial_penalties)
-    warm_scheduler = SchedulingEngine(graph=graph, random_seed=base_seed + 509)
-    apr_warm_sa = warm_scheduler.simulated_annealing(
-        penalties=apr_warm.get(),
-        evaluator=lambda order: objective_from_evaluation(evaluate(order, apr_warm.get())),
-        iterations=int(config["apr"]["classical_warmup_iterations"]),
-        start_temp=float(config["search"]["annealing_start_temp"]),
-        end_temp=float(config["search"]["annealing_end_temp"]),
-    )
-
-    warm_candidates = [lookahead.order, beam.order, anneal.order, apr_warm_sa.order]
-    warm_logs = []
-    for order in warm_candidates:
-        e = evaluate(order, apr_warm.get())
-        apr_warm.update(e["violation_rate"], e["cost_impact"])
-        warm_logs.append(
-            {
-                "objective": objective_from_evaluation(e),
-                "cost": e["breakdown"]["total_cost"],
-                "feasibility": e["feasibility"],
-                "penalties_after_update": apr_warm.get(),
-            }
-        )
-
-    ranked_warm = []
-    for order in warm_candidates:
-        probe = evaluate(order, apr_warm.get())
-        ranked_warm.append((-probe["feasibility"], objective_from_evaluation(probe), order))
-    ranked_warm.sort(key=lambda item: (item[0], item[1]))
-    apr_seed_order = ranked_warm[0][2]
-
-    def quantum_apr_builder(seed: int) -> ScheduleResult:
-        q = QuantumInterface(graph=graph, random_seed=seed)
-        apr_instance = AdaptivePenaltyRefinement(initial_penalties=apr_warm.get())
-        q_result = q.qaoa_with_apr(
-            seed_order=apr_seed_order,
-            evaluator=evaluate,
-            apr=apr_instance,
-            objective_from_evaluation=objective_from_evaluation,
-            rounds=int(config["apr"]["rounds"]),
-            layers=int(config["quantum"]["layers"]),
-            iterations_per_round=int(config["apr"]["iterations_per_round"]),
-            walkers=int(config["quantum"].get("walkers", 6)),
-        )
-        metadata = dict(q_result.metadata)
-        metadata["warmup_trace"] = warm_logs
-        return ScheduleResult(
-            strategy=q_result.strategy,
-            order=q_result.order,
-            score=q_result.score,
-            metadata=metadata,
-        )
-
-    quantum_apr: ScheduleResult | None = None
-    quantum_apr_eval: Dict | None = None
-    quantum_apr_rank = float("inf")
-    quantum_apr_trials = []
-
-    for idx in range(quantum_trials):
-        seed = base_seed + 239 + idx * 37
-        candidate = quantum_apr_builder(seed)
-        candidate_penalties = candidate.metadata.get("final_penalties", apr_warm.get())
-        candidate_eval = evaluate(candidate.order, baseline_penalties)
-        candidate_objective = objective_from_evaluation(candidate_eval)
-        candidate_rank = rank_score(candidate_eval, objective_from_evaluation)
-        quantum_apr_trials.append(
-            {
-                "trial": idx + 1,
-                "seed": seed,
-                "rank_score": candidate_rank,
-                "objective": candidate_objective,
-                "cost": candidate_eval["breakdown"]["total_cost"],
-                "feasibility": candidate_eval["feasibility"],
-                "selection_penalties": baseline_penalties,
-                "apr_final_penalties": candidate_penalties,
-            }
-        )
-        if candidate_rank < quantum_apr_rank:
-            quantum_apr_rank = candidate_rank
-            quantum_apr = candidate
-            quantum_apr_eval = candidate_eval
-
-    if quantum_apr is None or quantum_apr_eval is None:
-        raise RuntimeError("No Quantum + APR trial produced a valid schedule result.")
-    quantum_apr.metadata = dict(quantum_apr.metadata)
-    quantum_apr.metadata["trials"] = quantum_apr_trials
-    quantum_apr.metadata["selected_rank_score"] = quantum_apr_rank
-    quantum_apr.metadata["selected_objective"] = objective_from_evaluation(quantum_apr_eval)
-
-    results = {
-        "Greedy": {"order": greedy.order, "metadata": greedy.metadata, "evaluation": greedy_eval},
-        "Lookahead": {"order": lookahead.order, "metadata": lookahead.metadata, "evaluation": lookahead_eval},
-        "Beam Search": {"order": beam.order, "metadata": beam.metadata, "evaluation": beam_eval},
-        "Simulated Annealing": {"order": anneal.order, "metadata": anneal.metadata, "evaluation": anneal_eval},
-        "Quantum (QAOA)": {
-            "order": quantum_baseline.order,
-            "metadata": quantum_baseline.metadata,
-            "evaluation": quantum_eval,
-        },
-        "Quantum + APR": {"order": quantum_apr.order, "metadata": quantum_apr.metadata, "evaluation": quantum_apr_eval},
+def _run_suite(graph, config, penalties, evaluate, objective_fn, seed_offset):
+    exp = dict(config.get("experiment", {}))
+    search = dict(config.get("search", {}))
+    trials = int(exp.get("search_trials", 5))
+    seed = int(exp.get("seed", 17)) + seed_offset
+    methods = {
+        "Greedy": lambda e: e.greedy(penalties=penalties),
+        "Lookahead": lambda e: e.lookahead(
+            penalties=penalties,
+            lookahead_depth=int(search.get("lookahead_depth", 3)),
+            evaluator=lambda o: float(objective_fn(evaluate(o))),
+        ),
+        "Beam Search": lambda e: e.beam_search(
+            penalties=penalties,
+            beam_width=int(search.get("beam_width", 5)),
+            evaluator=lambda o: float(objective_fn(evaluate(o))),
+        ),
+        "Simulated Annealing": lambda e: e.simulated_annealing(
+            penalties=penalties,
+            evaluator=lambda o: float(objective_fn(evaluate(o))),
+            iterations=int(search.get("annealing_iterations", 240)),
+            start_temp=float(search.get("annealing_start_temp", 3.2)),
+            end_temp=float(search.get("annealing_end_temp", 0.05)),
+        ),
     }
-
-    for payload in results.values():
-        payload["metadata"] = dict(payload["metadata"])
-        payload["metadata"]["objective_name"] = objective_name
-    return results
-
-
-def build_formulation_comparison(cost_results: Dict[str, Dict], energy_results: Dict[str, Dict]) -> Dict[str, Dict]:
-    comparison = {}
-    for strategy in cost_results:
-        old_cost = float(cost_results[strategy]["evaluation"]["breakdown"]["total_cost"])
-        new_cost = float(energy_results[strategy]["evaluation"]["breakdown"]["total_cost"])
-        old_latency = float(cost_results[strategy]["evaluation"]["latency_cycles"])
-        new_latency = float(energy_results[strategy]["evaluation"]["latency_cycles"])
-        old_feasible = float(cost_results[strategy]["evaluation"]["feasibility"])
-        new_feasible = float(energy_results[strategy]["evaluation"]["feasibility"])
-        delta = old_cost - new_cost
-        pct = 0.0 if abs(old_cost) < 1e-9 else delta / old_cost
-        comparison[strategy] = {
-            "old_cost": old_cost,
-            "new_cost": new_cost,
-            "delta_cost": delta,
-            "improvement_percent": pct,
-            "latency_delta": old_latency - new_latency,
-            "feasibility_delta": (new_feasible - old_feasible) * 100.0,
-        }
-    return comparison
+    out = {}
+    for i, (name, builder) in enumerate(methods.items()):
+        best, ev = _run_trials(graph, trials, seed + i * 97, builder, evaluate, objective_fn)
+        out[name] = {"order": best.order, "metadata": best.metadata, "evaluation": ev}
+    return out
 
 
-def formulation_comparison_table(comparison: Dict[str, Dict]) -> str:
-    header = (
-        f"{'Strategy':<22}"
-        f"{'Old Cost':>12}"
-        f"{'New Cost':>12}"
-        f"{'Delta':>12}"
-        f"{'Improve%':>12}"
-        f"{'LatDelta':>10}"
-        f"{'FeasDelta%':>12}"
+def _x_metric(base_eval, cand_eval, weights):
+    def improve(old, new):
+        return 0.0 if abs(old) < 1e-9 else (old - new) / abs(old)
+
+    base_idle = float(base_eval["memory"].get("idle_cycles", 0.0)) + float(base_eval["bandwidth"].get("pipeline_stalls", 0.0))
+    cand_idle = float(cand_eval["memory"].get("idle_cycles", 0.0)) + float(cand_eval["bandwidth"].get("pipeline_stalls", 0.0))
+    return (
+        float(weights.get("cost", 0.3)) * improve(base_eval["breakdown"]["total_cost"], cand_eval["breakdown"]["total_cost"])
+        + float(weights.get("latency", 0.25)) * improve(base_eval["latency_cycles"], cand_eval["latency_cycles"])
+        + float(weights.get("dram", 0.25)) * improve(base_eval["memory"].get("dram_access", 0.0), cand_eval["memory"].get("dram_access", 0.0))
+        + float(weights.get("stalls", 0.2)) * improve(base_idle, cand_idle)
     )
-    line = "-" * len(header)
-    rows = [header, line]
-    ranked = sorted(comparison.items(), key=lambda item: item[1]["improvement_percent"], reverse=True)
-    for strategy, item in ranked:
-        rows.append(
-            f"{strategy:<22}"
-            f"{item['old_cost']:>12.2f}"
-            f"{item['new_cost']:>12.2f}"
-            f"{item['delta_cost']:>12.2f}"
-            f"{item['improvement_percent'] * 100.0:>12.2f}"
-            f"{item['latency_delta']:>10.2f}"
-            f"{item['feasibility_delta']:>12.2f}"
-        )
-    return "\n".join(rows)
-
-
-def x_factor(baseline_cost: float, optimized_cost: float) -> float:
-    if abs(baseline_cost) < 1e-9:
-        return 0.0
-    return (baseline_cost - optimized_cost) / baseline_cost
-
-
-def _best_classical_cost(results: Dict[str, Dict]) -> float:
-    keys = ["Greedy", "Lookahead", "Beam Search", "Simulated Annealing"]
-    return min(float(results[name]["evaluation"]["breakdown"]["total_cost"]) for name in keys)
-
-
-def build_x_factors(cost_results: Dict[str, Dict], energy_results: Dict[str, Dict]) -> Dict[str, Dict]:
-    baseline = float(cost_results["Greedy"]["evaluation"]["breakdown"]["total_cost"])
-    classical_optimized = _best_classical_cost(cost_results)
-    quantum_optimized = float(cost_results["Quantum (QAOA)"]["evaluation"]["breakdown"]["total_cost"])
-    quantum_new_optimized = min(
-        float(energy_results["Quantum (QAOA)"]["evaluation"]["breakdown"]["total_cost"]),
-        float(energy_results["Quantum + APR"]["evaluation"]["breakdown"]["total_cost"]),
-    )
-
-    return {
-        "classical_methods": {
-            "baseline_cost": baseline,
-            "optimized_cost": classical_optimized,
-            "x_factor": x_factor(baseline, classical_optimized),
-        },
-        "quantum": {
-            "baseline_cost": baseline,
-            "optimized_cost": quantum_optimized,
-            "x_factor": x_factor(baseline, quantum_optimized),
-        },
-        "quantum_plus_new_formulation": {
-            "baseline_cost": baseline,
-            "optimized_cost": quantum_new_optimized,
-            "x_factor": x_factor(baseline, quantum_new_optimized),
-        },
-    }
-
-
-def xfactor_table(x_factors: Dict[str, Dict]) -> str:
-    header = f"{'Track':<30}{'Baseline':>12}{'Optimized':>12}{'X':>10}"
-    line = "-" * len(header)
-    rows = [header, line]
-    for track, payload in x_factors.items():
-        rows.append(
-            f"{track:<30}"
-            f"{payload['baseline_cost']:>12.2f}"
-            f"{payload['optimized_cost']:>12.2f}"
-            f"{payload['x_factor']:>10.4f}"
-        )
-    return "\n".join(rows)
-
-
-def build_explanations(results: Dict[str, Dict], summaries: Dict[str, Dict], explainer: ScheduleExplainer) -> str:
-    blocks = []
-    for name, payload in results.items():
-        blocks.append(explainer.explain(name, payload, summaries[name]))
-        blocks.append("")
-    return "\n".join(blocks).strip()
 
 
 def main() -> None:
+    start = time.perf_counter()
     root = Path(__file__).resolve().parent
     config = load_config(root / "config.yaml")
-    graph = load_workload(root / config["input"]["workload"])
-
-    memory_hierarchy = MemoryHierarchy(config["hardware"])
-    bandwidth_estimator = BandwidthEstimator(config["hardware"])
-    fusion_logic = FusionLogic(config["fusion"])
+    graph = load_operator_graph(root / str(config["input"]["workload"]))
+    hardware = load_hardware_config(config.get("hardware", {}), num_nodes=len(graph.nodes))
+    penalties = dict(config.get("apr", {}).get("initial_penalties", {}))
 
     cost_model = ScheduleCostModel(
-        memory_hierarchy=memory_hierarchy,
-        bandwidth_estimator=bandwidth_estimator,
-        fusion_logic=fusion_logic,
-        weights=config["cost_weights"],
+        memory_hierarchy=MemoryHierarchy(dict(config.get("hardware", {}))),
+        bandwidth_estimator=BandwidthEstimator(dict(config.get("hardware", {}))),
+        fusion_logic=FusionLogic(dict(config.get("fusion", {}))),
+        weights=dict(config.get("cost_weights", {})),
     )
-    energy_model = EnergyScheduleModel(
-        cost_model=cost_model,
-        fusion_logic=fusion_logic,
-        weights=config.get("energy_weights", {}),
-        hardware_config=config.get("hardware", {}),
+    alpha, beta, gamma = _derive_weights(config)
+    cce = CCEEvaluator(graph, hardware, cost_model, alpha, beta, gamma, penalties)
+
+    eval_cost = lambda order: cost_model.evaluate(graph, order, penalties=penalties)
+    eval_cce = lambda order: cce.evaluate(order, penalties=penalties)
+    obj_cost = lambda ev: float(ev["breakdown"]["total_cost"])
+    obj_energy = lambda ev: float(ev["energy_breakdown"]["total_energy"])
+
+    baseline = _run_suite(graph, config, penalties, eval_cost, obj_cost, seed_offset=0)
+    cce_suite = _run_suite(graph, config, penalties, eval_cce, obj_energy, seed_offset=400)
+
+    apr_cfg = dict(config.get("apr", {}))
+    tuner = PenaltyTuner(
+        eta1=float(apr_cfg.get("eta1", 0.9)),
+        eta2=float(apr_cfg.get("eta2", 0.6)),
+        lam_min=float(apr_cfg.get("lam_min", 0.1)),
+        lam_max=float(apr_cfg.get("lam_max", 20.0)),
     )
+    cur_pen = dict(penalties)
+    best_apr = None
+    best_apr_obj = float("inf")
+    apr_trace = []
+    for rnd in range(int(apr_cfg.get("rounds", 5))):
+        engine = SchedulingEngine(graph, random_seed=900 + rnd * 17)
+        res = engine.simulated_annealing(
+            penalties=cur_pen,
+            evaluator=lambda o: float(obj_energy(cce.evaluate(o, penalties=cur_pen))),
+            iterations=int(apr_cfg.get("iterations_per_round", config.get("search", {}).get("annealing_iterations", 180))),
+            start_temp=float(config.get("search", {}).get("annealing_start_temp", 3.0)),
+            end_temp=float(config.get("search", {}).get("annealing_end_temp", 0.05)),
+        )
+        ev = cce.evaluate(res.order, penalties=cur_pen)
+        obj = obj_energy(ev)
+        if obj < best_apr_obj:
+            best_apr_obj = obj
+            best_apr = {"order": _complete_order(res.order, graph), "evaluation": ev}
+        cur_pen = tuner.update(cur_pen, ev.get("violation_rate", {}), ev.get("cost_impact", {}))
+        apr_trace.append({"round": rnd + 1, "objective": obj, "penalties": dict(cur_pen)})
+    cce_apr = {"order": best_apr["order"], "evaluation": best_apr["evaluation"], "metadata": {"round_trace": apr_trace, "final_penalties": cur_pen}}
+
+    qubo_data = cce.build_qubo_data(penalties=penalties)
+    candidates = run_qaoa_stub(qubo_data, num_samples=int(config.get("quantum", {}).get("samples", 48)), num_steps=int(config.get("quantum", {}).get("iterations", 220)), seed=int(config.get("experiment", {}).get("seed", 17)) + 1234)
+    best_q = None
+    best_q_obj = float("inf")
+    for c in candidates:
+        order = _complete_order(c.get("schedule_projection", []), graph)
+        ev = cce.evaluate(order, penalties=penalties)
+        obj = obj_energy(ev)
+        if obj < best_q_obj:
+            best_q_obj = obj
+            best_q = {"order": order, "evaluation": ev, "metadata": {"candidate": c, "backend": "qaoa_stub_local_search"}}
+    quantum_stub = best_q
+
+    ablations = {
+        "full_cce": cce_suite["Simulated Annealing"],
+        "no_pairwise": {"order": quantum_stub["order"], "evaluation": cce.evaluate(quantum_stub["order"], penalties=penalties, ablation="remove_pairwise"), "metadata": {}},
+        "no_higher_order": {"order": quantum_stub["order"], "evaluation": cce.evaluate(quantum_stub["order"], penalties=penalties, ablation="remove_higher_order"), "metadata": {}},
+    }
 
     analysis = ScheduleAnalysis()
     explainer = ScheduleExplainer()
+    baseline_summary = {k: analysis.summarize(k, v["evaluation"]) for k, v in baseline.items()}
+    cce_summary = {k: analysis.summarize(k, v["evaluation"]) for k, v in cce_suite.items()}
+    extra = {
+        "CCE + APR": analysis.summarize("CCE + APR", cce_apr["evaluation"]),
+        "Quantum (Stub)": analysis.summarize("Quantum (Stub)", quantum_stub["evaluation"]),
+    }
 
-    def evaluate_cost(order: Sequence[str], penalties: Dict[str, float] | None = None) -> Dict:
-        return cost_model.evaluate(graph, order, penalties=penalties)
+    best_base = min(baseline.items(), key=lambda kv: obj_cost(kv[1]["evaluation"]))
+    best_cce = min(cce_suite.items(), key=lambda kv: obj_energy(kv[1]["evaluation"]))
+    x_weights = dict(config.get("x_metric_weights", {"cost": 0.3, "latency": 0.25, "dram": 0.25, "stalls": 0.2}))
+    x_cce = _x_metric(best_base[1]["evaluation"], best_cce[1]["evaluation"], x_weights)
+    x_quantum = _x_metric(best_base[1]["evaluation"], quantum_stub["evaluation"], x_weights)
 
-    def evaluate_energy(order: Sequence[str], penalties: Dict[str, float] | None = None) -> Dict:
-        return energy_model.evaluate(graph, order, penalties=penalties)
-
-    cost_results = run_strategy_suite(
-        graph=graph,
-        config=config,
-        evaluate=evaluate_cost,
-        objective_from_evaluation=objective_cost,
-        objective_name="cost",
-    )
-    energy_results = run_strategy_suite(
-        graph=graph,
-        config=config,
-        evaluate=evaluate_energy,
-        objective_from_evaluation=objective_energy,
-        objective_name="energy",
-    )
-
-    cost_summaries = {name: analysis.summarize(name, payload["evaluation"]) for name, payload in cost_results.items()}
-    energy_summaries = {name: analysis.summarize(name, payload["evaluation"]) for name, payload in energy_results.items()}
-
-    cost_table = analysis.comparison_table(cost_summaries)
-    energy_table = analysis.comparison_table(energy_summaries)
-
-    comparison = build_formulation_comparison(cost_results, energy_results)
-    comparison_table = formulation_comparison_table(comparison)
-
-    x_factors = build_x_factors(cost_results, energy_results)
-    x_table = xfactor_table(x_factors)
-
-    cost_explanations = build_explanations(cost_results, cost_summaries, explainer)
-    energy_explanations = build_explanations(energy_results, energy_summaries, explainer)
-
-    output_dir = root / config["output"]["directory"]
+    output_dir = root / str(config.get("output", {}).get("directory", "outputs"))
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    with (output_dir / "schedules.json").open("w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "config_snapshot": config,
-                "formulations": {
-                    "cost_based": {
-                        "results": cost_results,
-                        "summaries": cost_summaries,
-                    },
-                    "energy_based": {
-                        "results": energy_results,
-                        "summaries": energy_summaries,
-                    },
-                },
-                "comparison": comparison,
-                "x_factors": x_factors,
-            },
-            f,
-            indent=2,
-        )
-
-    with (output_dir / "metrics.txt").open("w", encoding="utf-8") as f:
-        f.write("[Old Formulation: Cost-Based]\n")
-        f.write(cost_table)
-        f.write("\n\n[New Formulation: Energy-Based]\n")
-        f.write(energy_table)
-        f.write("\n\n[Old vs New Comparison]\n")
-        f.write(comparison_table)
-        f.write("\n\n[X Factor]\n")
-        f.write(x_table)
-        f.write("\n")
-
-    with (output_dir / "explanations.txt").open("w", encoding="utf-8") as f:
-        f.write("[Old Formulation]\n")
-        f.write(cost_explanations)
-        f.write("\n\n[Energy-Based Formulation]\n")
-        f.write(energy_explanations)
-        f.write("\n")
+    report = {
+        "workload": {"num_nodes": len(graph.nodes), "num_edges": len(graph.edges)},
+        "results": {
+            "baseline_cost": baseline,
+            "cce_qubo": cce_suite,
+            "cce_qubo_apr": cce_apr,
+            "quantum_stub": quantum_stub,
+        },
+        "ablations": ablations,
+        "x_metric": {"weights": x_weights, "cce_vs_baseline": x_cce, "quantum_vs_baseline": x_quantum},
+        "runtime_seconds": time.perf_counter() - start,
+    }
+    (output_dir / "schedules.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    (output_dir / "metrics.txt").write_text(
+        "[Baseline Cost Objective]\n"
+        + analysis.comparison_table(baseline_summary)
+        + "\n\n[CCE-QUBO Objective]\n"
+        + analysis.comparison_table(cce_summary)
+        + "\n\n[APR / Quantum Stub]\n"
+        + analysis.comparison_table(extra)
+        + "\n\n[X Metric]\n"
+        + f"CCE vs baseline: {x_cce:.4f}\nQuantum stub vs baseline: {x_quantum:.4f}\n",
+        encoding="utf-8",
+    )
+    explanations = [explainer.explain(name, payload, baseline_summary[name]) for name, payload in baseline.items()]
+    explanations.extend(explainer.explain(name, payload, cce_summary[name]) for name, payload in cce_suite.items())
+    explanations.append(explainer.explain("CCE + APR", cce_apr, extra["CCE + APR"]))
+    explanations.append(explainer.explain("Quantum (Stub)", quantum_stub, extra["Quantum (Stub)"]))
+    (output_dir / "explanations.txt").write_text("\n\n".join(explanations) + "\n", encoding="utf-8")
 
     print("Experiment completed.")
-    print("[Old Formulation: Cost-Based]")
-    print(cost_table)
-    print()
-    print("[New Formulation: Energy-Based]")
-    print(energy_table)
-    print()
-    print("[Old vs New Comparison]")
-    print(comparison_table)
-    print()
-    print("[X Factor]")
-    print(x_table)
+    print(f"Best baseline: {best_base[0]}")
+    print(f"Best CCE-QUBO: {best_cce[0]}")
+    print(f"X (CCE vs baseline): {x_cce:.4f}")
+    print(f"X (Quantum stub vs baseline): {x_quantum:.4f}")
     print(f"Saved outputs to: {output_dir}")
 
 

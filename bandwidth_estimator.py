@@ -4,10 +4,10 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Dict, Sequence
 
-from graph_builder import WorkloadGraph
+from core_types import OperatorGraph
 
 
-@dataclass
+@dataclass(slots=True)
 class BandwidthReport:
     bandwidth_congestion: float
     pipeline_stalls: float
@@ -19,7 +19,11 @@ class BandwidthReport:
 
 
 class BandwidthEstimator:
-    def __init__(self, config: Dict):
+    """
+    Coarse-grain read/write bandwidth pressure estimator over a schedule order.
+    """
+
+    def __init__(self, config: Dict) -> None:
         fallback = float(config.get("max_bytes_per_cycle", 8.0))
         self.read_capacity = float(config.get("read_bytes_per_cycle", fallback))
         self.write_capacity = float(config.get("write_bytes_per_cycle", fallback))
@@ -28,7 +32,7 @@ class BandwidthEstimator:
         self.window_size = int(config.get("bandwidth_window", 3))
         self.backlog_decay = float(config.get("backlog_decay", 0.68))
 
-    def simulate(self, graph: WorkloadGraph, order: Sequence[str]) -> BandwidthReport:
+    def simulate(self, graph: OperatorGraph, order: Sequence[int]) -> BandwidthReport:
         congestion = 0.0
         stalls = 0.0
         util_sum = 0.0
@@ -43,11 +47,11 @@ class BandwidthEstimator:
         write_backlog = 0.0
 
         for node_id in order:
-            node = graph.nodes[node_id]
-            cycles = max(1.0, node.compute_cycles)
+            node = graph.node_by_id[node_id]
+            cycles = max(1.0, float(node.compute_cycles))
 
-            read_demand = node.input_size / cycles
-            write_demand = node.output_size / cycles
+            read_demand = node.input_bytes / cycles
+            write_demand = node.output_bytes / cycles
 
             read_backlog *= self.backlog_decay
             write_backlog *= self.backlog_decay
@@ -71,9 +75,8 @@ class BandwidthEstimator:
             overflow_read = max(0.0, read_util - 1.0)
             overflow_write = max(0.0, write_util - 1.0)
             overflow = max(overflow_read, overflow_write)
-
-            if overflow > 0:
-                traffic = node.input_size + node.output_size
+            if overflow > 0.0:
+                traffic = node.input_bytes + node.output_bytes
                 burst_scale = 1.0 + 0.15 * max(0, len(read_window) - 1)
                 asymmetry = abs(read_util - write_util)
                 congestion += overflow * traffic * self.burst_sensitivity * burst_scale * (1.0 + 0.2 * asymmetry)
@@ -85,19 +88,20 @@ class BandwidthEstimator:
 
             backlog_pressure += read_backlog + write_backlog
 
-        avg_util = util_sum / max(1, len(order))
-        avg_read_util = read_util_sum / max(1, len(order))
-        avg_write_util = write_util_sum / max(1, len(order))
+        n = max(1, len(order))
+        avg_util = util_sum / n
+        avg_read = read_util_sum / n
+        avg_write = write_util_sum / n
 
         return BandwidthReport(
             bandwidth_congestion=congestion,
             pipeline_stalls=stalls,
             avg_utilization=avg_util,
-            read_utilization=avg_read_util,
-            write_utilization=avg_write_util,
-            backlog_pressure=backlog_pressure / max(1.0, len(order)),
+            read_utilization=avg_read,
+            write_utilization=avg_write,
+            backlog_pressure=backlog_pressure / n,
             violations={
                 "bandwidth_capacity": violations,
-                "bandwidth_imbalance": abs(avg_read_util - avg_write_util),
+                "bandwidth_imbalance": abs(avg_read - avg_write),
             },
         )
