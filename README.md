@@ -1,73 +1,147 @@
 # CCE-QOS: Constraint-Coupled Energy – Quantum Operator Scheduling
 
-CCE-QOS (Constraint-Coupled Energy – Quantum Operator Scheduling) is a research-grade scheduling framework for neural processing units (NPUs) that treats operator scheduling as an energy minimization problem and exposes it as a QUBO suitable for both classical and quantum optimization.
+CCE-QOS is a scheduling framework for NPUs where the scheduling problem is formulated as a constraint-coupled energy minimization problem and mapped into a QUBO representation. This allows the same formulation to be optimized using both classical schedulers and (in future work) quantum methods like QAOA.
 
-Instead of using ad-hoc heuristics or purely additive cost models, CCE-QOS builds a **constraint-coupled energy function** that captures how compute, memory, bandwidth, and feasibility constraints interact across the entire operator graph. This same energy is then optimized by classical algorithms (greedy, beam, annealing, etc.) and, in future work, by a QAOA-based quantum backend.
+Instead of using simple additive cost models, this project builds a structured energy function that captures interactions between compute, memory hierarchy, bandwidth, and scheduling constraints across the entire operator graph.
 
-## Core idea
+---
 
-Given a neural network operator DAG and an NPU hardware configuration (resources, multi-level memory, DVFS states, bandwidth limits), CCE-QOS encodes scheduling decisions into binary variables and defines a total energy
+## Core Formulation
+
+Given an operator DAG \( G = (V, E) \) and a hardware configuration (resources, memory levels, DVFS states, bandwidth limits), scheduling decisions are encoded using binary variables such as:
+
+- \( x_{i,t,r} \): operator \( i \) executes at time \( t \) on resource \( r \)  
+- \( m_{i,\ell} \): operator \( i \) is placed in memory level \( \ell \)  
+- \( f_{t,s} \): DVFS state \( s \) at time \( t \)  
+- auxiliary variables for higher-order effects  
+
+The total energy is defined as:
 
 \[
-E(\mathbf{z}) = E_{\text{unary}}(\mathbf{z}) + E_{\text{pair}}(\mathbf{z}) + E_{\text{high}}(\mathbf{z}) + E_{\text{constr}}(\mathbf{z}; \boldsymbol{\lambda}),
+E(z) = E_{\text{unary}} + E_{\text{pair}} + E_{\text{high}} + E_{\text{constr}}(\lambda)
 \]
 
-where:
+### Unary Terms
+Capture per-operator effects:
+- compute latency and energy  
+- DRAM access cost  
+- SRAM reuse loss  
+- DVFS-dependent scaling  
 
-- **Unary terms** capture per-operator compute, energy, and latency costs.
-- **Pairwise terms** capture data reuse, fusion compatibility, and bandwidth interactions between operators.
-- **Higher-order terms** model effects that involve many operators at once, such as memory bank conflicts, DRAM burst congestion, and pipeline stall cascades (implemented via auxiliary variables and penalties).
-- **Constraint terms** enforce feasibility (unique execution, dependency ordering, DVFS one-hot, memory capacity) via adaptive penalty weights \(\boldsymbol{\lambda}\).
+---
 
-This formulation yields a **Constraint-Coupled Energy QUBO** that can be passed to classical or quantum optimizers without changing the underlying problem definition.
+### Pairwise Terms
+Capture interactions between operators:
+- data reuse benefits  
+- fusion compatibility  
+- bandwidth contention  
 
-## What CCE-QOS provides
+---
 
-CCE-QOS is structured as a full research pipeline rather than just a single heuristic:
+### Higher-Order Terms (Key Part of the Project)
+Model effects involving multiple operators:
+- memory bank conflicts  
+- burst DRAM congestion  
+- pipeline stall cascades  
+- parallelism collapse  
 
-- **Operator and hardware modeling**
-  - `graph_builder.py` constructs the operator DAG with metadata.
-  - `memory_hierarchy.py` and `bandwidth_estimator.py` model the memory system and DRAM usage.
-  - `core_types.py` defines data structures for graphs, hardware, schedules, and metrics.
+These are approximated using auxiliary variables and penalty terms in the QUBO.
 
-- **Energy formulation and QUBO construction**
-  - `energy_model.py` implements the CCE-QUBO energy function and builds the QUBOData structure.
-  - `cost_model.py` provides a baseline additive cost formulation for comparison.
-  - `qubo_types.py` defines the QUBO representation shared by classical and quantum solvers.
+---
 
-- **Scheduling and optimization**
-  - `scheduling_engine.py` runs classical schedulers (e.g., greedy, lookahead/beam, annealing) on either the baseline cost model or the CCE-QUBO energy.
-  - `penalty_tuner.py` implements Adaptive Penalty Refinement (APR), which updates constraint penalties based on observed violations and stabilizes the search.
-  - `quantum_interface.py` defines the API that a future QAOA backend will use to consume the same QUBO.
+### Constraint Terms
+Ensure feasibility using penalty weights \( \lambda \):
+- unique scheduling of operators  
+- dependency ordering  
+- memory capacity limits  
+- DVFS one-hot constraints  
 
-- **Experiments and analysis**
-  - `run_experiment.py` orchestrates experiments across multiple workloads and methods, logging metrics (cost, latency, DRAM usage, feasibility, runtime).
-  - `schedule_analysis.py` and `schedule_explainer.py` provide aggregate metrics and human-readable explanations of schedules.
-  - `plot_results.py` generates publication-ready figures from logged results.
+---
 
-- **Reports and specifications**
-  - `classical_report.tex` is a paper-style report for the classical and CCE-QUBO side, with experiments and ablations.
-  - `quantum_backend_spec.tex` is an implementation spec for the QAOA-based quantum backend.
-  - `project_guide.tex` gives a high-level overview and project roadmap.
+## Adaptive Penalty Refinement (APR)
 
-## Why "Constraint-Coupled Energy – Quantum Operator Scheduling"?
+Instead of fixed penalties, CCE-QOS uses an adaptive scheme:
 
-- **Constraint-Coupled Energy**: The energy is not just a sum of independent costs. It explicitly encodes how constraints (dependencies, memory, bandwidth, DVFS) are coupled across operators and time, making the scheduling landscape highly structured and non-separable.
+\[
+\lambda_k^{t+1} = \text{clip}\left(
+\lambda_k^t + \eta_1 \cdot \text{violation\_rate}_k + \eta_2 \cdot \text{cost\_impact}_k,
+[\lambda_{\min}, \lambda_{\max}]
+\right)
+\]
 
-- **Quantum Operator Scheduling**: By expressing the full scheduling problem as a QUBO, CCE-QOS makes quantum optimization (e.g., QAOA) a first-class citizen. The quantum backend does not see a separate toy problem; it sees the same CCE-QUBO that the classical solvers optimize.
+APR helps:
+- reduce constraint violations over time  
+- stabilize optimization  
+- avoid overly aggressive penalties  
 
-Together, this makes CCE-QOS a **bridge between compiler-style NPU scheduling and quantum optimization**, rather than a classical system with a superficial quantum add-on.
+---
 
-## Project status
+## Project Structure
 
-The repository currently includes:
+### Modeling Layer
+- `graph_builder.py` → builds operator DAG  
+- `memory_hierarchy.py` → models multi-level memory  
+- `bandwidth_estimator.py` → estimates DRAM/bandwidth behavior  
+- `core_types.py` → defines graph, hardware, and schedule structures  
 
-- A working classical pipeline (CCE-QUBO + APR + schedulers + experiments).
-- Scripts and LaTeX documents for generating and presenting results.
-- Stubs and specifications for a QAOA-based quantum backend.
+---
 
-Future work focuses on:
+### Formulation Layer
+- `energy_model.py` → implements full CCE-QUBO formulation  
+- `cost_model.py` → baseline additive cost model  
+- `qubo_types.py` → QUBO representation (shared across solvers)  
 
-- Implementing and integrating a real quantum backend using QAOA or related variational algorithms.
-- Scaling experiments to larger models and more realistic NPU configurations.
-- Exploring robustness of CCE-QUBO and APR under noisy or approximate hardware models.
+---
+
+### Optimization Layer
+- `scheduling_engine.py`:
+  - greedy scheduling  
+  - lookahead / beam search  
+  - simulated annealing  
+
+- `penalty_tuner.py`:
+  - APR implementation  
+  - penalty updates and tracking  
+
+- `quantum_interface.py`:
+  - interface for QAOA backend  
+  - consumes same QUBO formulation  
+
+---
+
+### Experiments and Analysis
+- `run_experiment.py`:
+  - runs multiple workloads and seeds  
+  - logs metrics (cost, latency, DRAM, feasibility, runtime)
+
+- `schedule_analysis.py`:
+  - aggregates metrics  
+  - computes comparisons  
+
+- `schedule_explainer.py`:
+  - generates human-readable explanations  
+
+- `plot_results.py`:
+  - creates figures (cost comparison, APR behavior, ablations)  
+
+---
+
+## Key Idea
+
+The main idea is that scheduling should not be treated as independent decisions.  
+In real hardware, compute, memory, and bandwidth constraints are tightly coupled.
+
+CCE-QOS models this coupling explicitly using an energy-based formulation, which makes the optimization landscape more realistic but also more complex.
+
+---
+
+## Why QUBO + Quantum?
+
+By expressing the entire scheduling problem as a QUBO:
+
+- classical solvers can still be used  
+- quantum algorithms (like QAOA) can operate directly on the same formulation  
+
+So the quantum backend is not solving a simplified problem—it works on the exact same energy function.
+
+---
