@@ -1,0 +1,26 @@
+1) Explain your project in simple terms
+This project is basically a smarter scheduler for NPU workloads. Instead of just picking the next ready operation and moving on, it checks memory pressure, bandwidth limits, and possible operator fusion. Then it compares multiple scheduling strategies, and finally does a refinement stage where penalties adapt based on what constraints keep getting violated.
+
+2) What makes scheduling difficult?
+The graph dependencies are only one part. Even if an order is valid, it can still be bad because SRAM gets stressed, tensors spill to DRAM, or bandwidth bursts cause stalls. So the hard part is balancing compute order with hardware behavior, not just topological correctness.
+
+3) Why is your cost model designed this way?
+I wanted each major hardware issue to have a separate cost term so we can debug and tune it. DRAM access, reuse loss, bandwidth congestion, pipeline stalls, fusion gain, and parallelism loss are all tracked individually. This gives better control than a single opaque score, and APR can react to specific constraints instead of guessing.
+
+4) What is SRAM reuse loss?
+It means we had data that could have been reused from on-chip SRAM, but due to ordering/evictions we had to fetch again or lost locality. In my model, reuse loss grows when tensors are evicted while they still have remaining consumers, so the scheduler learns to keep high-value tensors resident longer.
+
+5) Why is bandwidth modeling important?
+Because many schedules fail due to traffic bursts, not compute shortage. The model tracks read/write utilization, moving windows, backlog carry-over, and overflow stalls. Without this, a schedule can look good on paper but still waste cycles waiting on memory transfers.
+
+6) What is APR and how does it improve results?
+APR means Adaptive Penalty Refinement. After each round, it updates penalty multipliers using three signals: violation_rate, cost_impact, and constraint_frequency. So if a constraint is repeatedly violated and also contributing to cost, that penalty grows automatically. It improves constraint awareness and helps avoid schedules that look cheap but are unstable under hardware limits.
+
+7) Why not use only greedy scheduling?
+Greedy is fast, but it is myopic. It makes strong local choices and can miss better global orderings. In my results, lookahead/beam variants clearly beat greedy on total cost, and hybrid refinement finds alternatives that greedy usually never explores.
+
+8) What are the key improvements in your system?
+Main improvements are: hardware-aware cost decomposition, realistic memory plus bandwidth simulation, multiple classical search strategies, and APR-based adaptive penalties. The result is better schedule quality and much clearer analysis of where performance is being lost.
+
+9) What are limitations?
+It is still a simulation study, not real hardware deployment. Workload scale is modest, and the quantum part is simulator-style refinement. So the conclusions are about scheduling behavior and design quality, not production NPU speedup guarantees.

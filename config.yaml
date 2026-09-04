@@ -1,0 +1,90 @@
+{
+  "experiment": {
+    "seed": 17,
+    "search_trials": 3,
+    "quantum_trials": 2
+  },
+  "input": {
+    "workload": "example_workload.json"
+  },
+  "output": {
+    "directory": "outputs"
+  },
+  "hardware": {
+    "sram_capacity": 720.0,
+    "sram_banks": 6,
+    "max_bytes_per_cycle": 6.6,
+    "read_bytes_per_cycle": 6.4,
+    "write_bytes_per_cycle": 6.9,
+    "bandwidth_window": 4,
+    "backlog_decay": 0.66,
+    "prefetch_slots": 3,
+    "bank_conflict_factor": 0.11,
+    "eviction_idle_factor": 0.038,
+    "write_back_factor": 1.0,
+    "prefetch_ratio": 0.22,
+    "stall_factor": 1.25,
+    "burst_sensitivity": 0.47
+  },
+  "fusion": {
+    "fusible_pairs": [
+      ["conv", "batchnorm"],
+      ["batchnorm", "relu"],
+      ["conv", "relu"],
+      ["dense", "relu"],
+      ["matmul", "gelu"],
+      ["add", "relu"],
+      ["dense", "norm"]
+    ],
+    "fusible_triplets": [
+      ["conv", "batchnorm", "relu"],
+      ["dense", "gelu", "dense"]
+    ],
+    "max_tensor_for_fusion": 540.0,
+    "base_gain_factor": 0.09,
+    "compute_overlap_factor": 0.16,
+    "locality_bonus": 0.06
+  },
+  "cost_weights": {
+    "dram_access": 1.0,
+    "sram_reuse_loss": 1.2,
+    "bandwidth_congestion": 1.1,
+    "pipeline_stalls": 1.0,
+    "fusion_gain": 1.0,
+    "parallelism_loss": 0.75
+  },
+  "energy_weights": {
+    "unary_cost": 1.0,
+    "data_reuse_reward": 1.1,
+    "fusion_reward": 1.8,
+    "bandwidth_spike_penalty": 0.7,
+    "memory_conflict_penalty": 0.6,
+    "bandwidth_tolerance": 46.0,
+    "bank_count_hint": 6
+  },
+  "search": {
+    "lookahead_depth": 3,
+    "beam_width": 5,
+    "annealing_iterations": 320,
+    "annealing_start_temp": 3.8,
+    "annealing_end_temp": 0.04
+  },
+  "quantum": {
+    "layers": 3,
+    "iterations": 160,
+    "walkers": 7
+  },
+  "apr": {
+    "rounds": 5,
+    "iterations_per_round": 70,
+    "classical_warmup_iterations": 180,
+    "initial_penalties": {
+      "sram_capacity": 1.0,
+      "bandwidth_capacity": 1.0,
+      "dependency_conflict": 1.0,
+      "dram_pressure": 1.0,
+      "memory_bank_conflict": 0.9,
+      "bandwidth_imbalance": 0.8
+    }
+  }
+}
