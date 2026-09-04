@@ -1,0 +1,10 @@
+﻿__pycache__/
+*.py[cod]
+*$py.class
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.toc
+*.out
+*.log

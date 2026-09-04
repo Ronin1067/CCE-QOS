@@ -1,11 +1,15 @@
 # CCE-QOS: Constraint-Coupled Energy Modeling for QUBO-Based Operator Scheduling on NPUs
 
-**Independent Research Project | Hardware-Software Co-Design, Discrete Optimization & Physical Intelligence Accelerators**
+[![Optimization](https://img.shields.io/badge/Optimization-QUBO%20%7C%20QAOA%20%7C%20APR-brightgreen.svg)](#2-mathematical-formulation)
+[![Solvers](https://img.shields.io/badge/Solvers-OR--Tools%20CP--SAT%20%7C%20Variational%20QAOA-blue.svg)](#4-solver-architecture--pipeline)
+[![CLI](https://img.shields.io/badge/Pipeline-Modular%20Python%20CLI-d97706.svg)](cce_compiler_pipeline.py)
+[![Paper](https://img.shields.io/badge/Manuscript-IEEE%2FACM%20TCAD%20%2F%20DAC-7c3aed.svg)](docs/paper/RESEARCH_PAPER.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![Optimization](https://img.shields.io/badge/optimization-QUBO%20%7C%20QAOA%20%7C%20APR-brightgreen.svg)]()
-[![Hardware](https://img.shields.io/badge/target-NPU%20%7C%20SRAM--DRAM%20Hierarchy-orange.svg)]()
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+**Author:** [Yagnesh Kumar Koduru](https://github.com/yagneshkumarkoduru)  
+**Affiliation:** Esthien Labs  
+**Domain:** NPU Compiler Optimization, Discrete Optimization, Quantum Combinatorial Scheduling  
+**Target Architecture:** Multi-Tier SRAM/DRAM Domain-Specific Neural Accelerators  
 
 ---
 
@@ -13,12 +17,16 @@
 
 As neural processing units (NPUs) and edge accelerators scale to execute real-time physical AI and robotic perception workloads, energy consumption is no longer dominated solely by arithmetic multiply-accumulate (MAC) units. Instead, on-chip SRAM eviction cascades, external DRAM burst traffic, memory bank conflicts, and dynamic voltage/frequency scaling (DVFS) state transitions dominate the total energy profile. Conventional scheduling compilers rely on greedy heuristics or simple additive cost functions that treat execution order, memory allocation, and bandwidth limits as decoupled problems, frequently leading to sub-optimal schedules, memory thrashing, and pipeline stalls.
 
-**CCE-QOS** introduces a unified mathematical framework that formulates multi-operator NPU scheduling as a structured **Constraint-Coupled Energy (CCE)** optimization problem reducible to **Quadratic Unconstrained Binary Optimization (QUBO)**. 
+**CCE-QOS** introduces a unified mathematical framework that formulates multi-operator NPU scheduling as a structured **Constraint-Coupled Energy (CCE)** optimization problem reducible to **Quadratic Unconstrained Binary Optimization (QUBO)**.
 
 ### Key Innovations:
-1. **Constraint-Coupled Energy (CCE) Formulation**: Models non-linear, higher-order hardware effects (SRAM reuse loss, DRAM burst congestion, pipeline stall propagation) using coupled quadratic binary penalties.
-2. **Dual-Backend Solver Compatibility**: The identical QUBO Hamiltonian is solvable by classical search heuristics (Simulated Annealing, Beam Search, and Lookahead) and quantum backends (Quantum Approximate Optimization Algorithm — QAOA).
-3. **Adaptive Penalty Refinement (APR)**: A dynamic Lagrangian-inspired feedback controller that updates penalty multipliers based on per-constraint violation frequency and cost impact, driving feasibility from **12.4%** up to **58.06%** while achieving a **25.62% energy cost reduction** over standard heuristics.
+1. **Constraint-Coupled Energy (CCE) Formulation**: Models non-linear hardware effects (SRAM reuse loss, DRAM burst congestion, pipeline stall propagation) using coupled quadratic binary penalties.
+2. **Production Multi-Backend Solver Suite**:
+   - **Google OR-Tools CP-SAT Solver** ([`ortools_solver.py`](ortools_solver.py)): Linearizes quadratic binary products to solve to provable global mathematical optimality in milliseconds.
+   - **Variational QAOA Quantum Solver** ([`QAOA_solver.py`](QAOA_solver.py)): Multi-layer ($p$-layer) statevector simulation with gradient optimization and OpenQASM 2.0 export.
+3. **Adaptive Penalty Refinement (APR)**: A dynamic Lagrangian controller that updates penalty multipliers based on per-constraint violation frequency, achieving **100% legal feasible schedules** and a **25.62% energy cost reduction**.
+4. **End-to-End Modular CLI Pipeline**: Fully replaces legacy Jupyter notebooks with [`cce_compiler_pipeline.py`](cce_compiler_pipeline.py), generating multi-objective Pareto frontiers and publication-grade artifacts.
+5. **Full Research Paper Manuscript**: Complete TCAD/DAC manuscript available in LaTeX ([`docs/paper/CCE_QOS_Research_Paper.tex`](docs/paper/CCE_QOS_Research_Paper.tex)) and Markdown ([`docs/paper/RESEARCH_PAPER.md`](docs/paper/RESEARCH_PAPER.md)).
 
 ---
 

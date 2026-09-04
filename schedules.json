@@ -1,0 +1,3258 @@
+{
+  "config_snapshot": {
+    "experiment": {
+      "seed": 17,
+      "search_trials": 3,
+      "quantum_trials": 2
+    },
+    "input": {
+      "workload": "example_workload.json"
+    },
+    "output": {
+      "directory": "outputs"
+    },
+    "hardware": {
+      "sram_capacity": 720.0,
+      "sram_banks": 6,
+      "max_bytes_per_cycle": 6.6,
+      "read_bytes_per_cycle": 6.4,
+      "write_bytes_per_cycle": 6.9,
+      "bandwidth_window": 4,
+      "backlog_decay": 0.66,
+      "prefetch_slots": 3,
+      "bank_conflict_factor": 0.11,
+      "eviction_idle_factor": 0.038,
+      "write_back_factor": 1.0,
+      "prefetch_ratio": 0.22,
+      "stall_factor": 1.25,
+      "burst_sensitivity": 0.47
+    },
+    "fusion": {
+      "fusible_pairs": [
+        [
+          "conv",
+          "batchnorm"
+        ],
+        [
+          "batchnorm",
+          "relu"
+        ],
+        [
+          "conv",
+          "relu"
+        ],
+        [
+          "dense",
+          "relu"
+        ],
+        [
+          "matmul",
+          "gelu"
+        ],
+        [
+          "add",
+          "relu"
+        ],
+        [
+          "dense",
+          "norm"
+        ]
+      ],
+      "fusible_triplets": [
+        [
+          "conv",
+          "batchnorm",
+          "relu"
+        ],
+        [
+          "dense",
+          "gelu",
+          "dense"
+        ]
+      ],
+      "max_tensor_for_fusion": 540.0,
+      "base_gain_factor": 0.09,
+      "compute_overlap_factor": 0.16,
+      "locality_bonus": 0.06
+    },
+    "cost_weights": {
+      "dram_access": 1.0,
+      "sram_reuse_loss": 1.2,
+      "bandwidth_congestion": 1.1,
+      "pipeline_stalls": 1.0,
+      "fusion_gain": 1.0,
+      "parallelism_loss": 0.75
+    },
+    "energy_weights": {
+      "unary_cost": 1.0,
+      "data_reuse_reward": 1.1,
+      "fusion_reward": 1.8,
+      "bandwidth_spike_penalty": 0.7,
+      "memory_conflict_penalty": 0.6,
+      "bandwidth_tolerance": 46.0,
+      "bank_count_hint": 6
+    },
+    "search": {
+      "lookahead_depth": 3,
+      "beam_width": 5,
+      "annealing_iterations": 320,
+      "annealing_start_temp": 3.8,
+      "annealing_end_temp": 0.04
+    },
+    "quantum": {
+      "layers": 3,
+      "iterations": 160,
+      "walkers": 7
+    },
+    "apr": {
+      "rounds": 5,
+      "iterations_per_round": 70,
+      "classical_warmup_iterations": 180,
+      "initial_penalties": {
+        "sram_capacity": 1.0,
+        "bandwidth_capacity": 1.0,
+        "dependency_conflict": 1.0,
+        "dram_pressure": 1.0,
+        "memory_bank_conflict": 0.9,
+        "bandwidth_imbalance": 0.8
+      }
+    }
+  },
+  "formulations": {
+    "cost_based": {
+      "results": {
+        "Greedy": {
+          "order": [
+            "input_norm",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "depthwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "pointwise_conv",
+            "cnn_pool",
+            "cnn_dense",
+            "skip_proj",
+            "patch_embed",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "distill_proj",
+            "distill_relu",
+            "attn_proj",
+            "residual_add",
+            "mlp_dense1",
+            "mlp_gelu",
+            "distill_add",
+            "distill_head",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "penalties": {
+              "sram_capacity": 1.0,
+              "bandwidth_capacity": 1.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 1.0,
+              "memory_bank_conflict": 0.9,
+              "bandwidth_imbalance": 0.8
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 28,
+                "rank_score": 5607.7204979573735,
+                "objective": 5669.650624908466,
+                "cost": 5669.650624908466,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 2,
+                "seed": 65,
+                "rank_score": 5607.7204979573735,
+                "objective": 5669.650624908466,
+                "cost": 5669.650624908466,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 3,
+                "seed": 102,
+                "rank_score": 5607.7204979573735,
+                "objective": 5669.650624908466,
+                "cost": 5669.650624908466,
+                "feasibility": 0.5160843912591051
+              }
+            ],
+            "selected_rank_score": 5607.7204979573735,
+            "selected_objective": 5669.650624908466,
+            "objective_name": "cost"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 2226.24,
+              "sram_reuse_loss": 811.9932,
+              "bandwidth_congestion": 1815.2298962676036,
+              "pipeline_stalls": 264.68456774083427,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 738.1564647766322,
+              "penalty_cost": 59.1344961233963,
+              "total_cost": 5669.650624908466
+            },
+            "memory": {
+              "dram_access": 2226.24,
+              "sram_reuse_loss": 672.8000000000001,
+              "peak_sram_usage": 670.0,
+              "idle_cycles": 90.30499999999999,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.7172939068100358,
+              "prefetch_bytes_saved": 573.76,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1649.8640637319133,
+              "pipeline_stalls": 262.79696774083425,
+              "avg_utilization": 0.867398278998588,
+              "read_utilization": 0.867398278998588,
+              "write_utilization": 0.6650288126057312,
+              "backlog_pressure": 0.9855224999968576,
+              "violations": {
+                "bandwidth_capacity": 15.0,
+                "bandwidth_imbalance": 0.2023694663928568
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.4838709677419355,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.2532696245733788,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.2023694663928568
+            },
+            "cost_impact": {
+              "sram_capacity": 0.13865284010932225,
+              "bandwidth_capacity": 0.3551582052894391,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.38014419180478054,
+              "memory_bank_conflict": 0.0016358440049095326,
+              "bandwidth_imbalance": 0.00033904019605770846
+            },
+            "feasibility": 0.5160843912591051,
+            "latency_cycles": 3456.2497961158333,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.903225806451613
+            }
+          }
+        },
+        "Lookahead": {
+          "order": [
+            "input_norm",
+            "patch_embed",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "depthwise_conv",
+            "skip_proj",
+            "pointwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "cnn_pool",
+            "cnn_dense",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "attn_proj",
+            "residual_add",
+            "distill_proj",
+            "distill_relu",
+            "mlp_dense1",
+            "distill_add",
+            "distill_head",
+            "mlp_gelu",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "depth": 3,
+            "rollout_trials": 4,
+            "branch_factor": 3,
+            "penalties": {
+              "sram_capacity": 1.0,
+              "bandwidth_capacity": 1.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 1.0,
+              "memory_bank_conflict": 0.9,
+              "bandwidth_imbalance": 0.8
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 84,
+                "rank_score": 4102.890084755709,
+                "objective": 4168.691179448737,
+                "cost": 4168.691179448737,
+                "feasibility": 0.5483424557752341
+              },
+              {
+                "trial": 2,
+                "seed": 121,
+                "rank_score": 4102.890084755709,
+                "objective": 4168.691179448737,
+                "cost": 4168.691179448737,
+                "feasibility": 0.5483424557752341
+              },
+              {
+                "trial": 3,
+                "seed": 158,
+                "rank_score": 4102.890084755709,
+                "objective": 4168.691179448737,
+                "cost": 4168.691179448737,
+                "feasibility": 0.5483424557752341
+              }
+            ],
+            "selected_rank_score": 4102.890084755709,
+            "selected_objective": 4168.691179448737,
+            "objective_name": "cost"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 554.4731999999999,
+              "bandwidth_congestion": 1098.2769270407814,
+              "pipeline_stalls": 227.42065574926932,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 828.7011383161512,
+              "penalty_cost": 56.56725834253507,
+              "total_cost": 4168.691179448737
+            },
+            "memory": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 458.19999999999993,
+              "peak_sram_usage": 680.0,
+              "idle_cycles": 62.184999999999995,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.6886200716845878,
+              "prefetch_bytes_saved": 410.96,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 998.2108213710295,
+              "pipeline_stalls": 225.53305574926932,
+              "avg_utilization": 0.8808696560598398,
+              "read_utilization": 0.8808696560598398,
+              "write_utilization": 0.665835407537143,
+              "backlog_pressure": 0.6364247601271413,
+              "violations": {
+                "bandwidth_capacity": 14.0,
+                "bandwidth_imbalance": 0.2150342485226968
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.45161290322580644,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.18760409556313992,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.2150342485226968
+            },
+            "cost_impact": {
+              "sram_capacity": 0.1272336866916883,
+              "bandwidth_capacity": 0.3042047675102022,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.3784014064197543,
+              "memory_bank_conflict": 0.0021983005102976555,
+              "bandwidth_imbalance": 0.0003755066164145317
+            },
+            "feasibility": 0.5483424557752341,
+            "latency_cycles": 3390.8135194632882,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.8709677419354838
+            }
+          }
+        },
+        "Beam Search": {
+          "order": [
+            "input_norm",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "depthwise_conv",
+            "skip_proj",
+            "pointwise_conv",
+            "cnn_pool",
+            "cnn_dense",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "patch_embed",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "attn_proj",
+            "residual_add",
+            "distill_proj",
+            "distill_relu",
+            "mlp_dense1",
+            "distill_add",
+            "distill_head",
+            "mlp_gelu",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "beam_width": 5,
+            "expansion_topk": 4,
+            "penalties": {
+              "sram_capacity": 1.0,
+              "bandwidth_capacity": 1.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 1.0,
+              "memory_bank_conflict": 0.9,
+              "bandwidth_imbalance": 0.8
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 118,
+                "rank_score": 4107.328715753395,
+                "objective": 4169.2588427044875,
+                "cost": 4169.2588427044875,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 2,
+                "seed": 155,
+                "rank_score": 4107.328715753395,
+                "objective": 4169.2588427044875,
+                "cost": 4169.2588427044875,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 3,
+                "seed": 192,
+                "rank_score": 4107.328715753395,
+                "objective": 4169.2588427044875,
+                "cost": 4169.2588427044875,
+                "feasibility": 0.5160843912591051
+              }
+            ],
+            "selected_rank_score": 4107.328715753395,
+            "selected_objective": 4169.2588427044875,
+            "objective_name": "cost"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1383.84,
+              "sram_reuse_loss": 436.1531999999999,
+              "bandwidth_congestion": 1469.5304023974477,
+              "pipeline_stalls": 285.0081624684956,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 780.8858462199313,
+              "penalty_cost": 59.62923161861397,
+              "total_cost": 4169.2588427044875
+            },
+            "memory": {
+              "dram_access": 1383.84,
+              "sram_reuse_loss": 359.59999999999997,
+              "peak_sram_usage": 710.0,
+              "idle_cycles": 49.265,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.7047491039426523,
+              "prefetch_bytes_saved": 336.16,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1335.6275277688496,
+              "pipeline_stalls": 283.12056246849556,
+              "avg_utilization": 0.8771443181060248,
+              "read_utilization": 0.8771443181060248,
+              "write_utilization": 0.6652607075743666,
+              "backlog_pressure": 0.883433381072887,
+              "violations": {
+                "bandwidth_capacity": 15.0,
+                "bandwidth_imbalance": 0.21188361053165816
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.4838709677419355,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.1574334470989761,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.21188361053165816
+            },
+            "cost_impact": {
+              "sram_capacity": 0.10014038582427921,
+              "bandwidth_capacity": 0.40284049006003564,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.3177284300999524,
+              "memory_bank_conflict": 0.0021995594579991506,
+              "bandwidth_imbalance": 0.0004324346249321698
+            },
+            "feasibility": 0.5160843912591051,
+            "latency_cycles": 3435.5180774756564,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.8064516129032258
+            }
+          }
+        },
+        "Simulated Annealing": {
+          "order": [
+            "input_norm",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "depthwise_conv",
+            "skip_proj",
+            "pointwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "cnn_pool",
+            "cnn_dense",
+            "patch_embed",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "distill_proj",
+            "distill_relu",
+            "attn_proj",
+            "residual_add",
+            "mlp_dense1",
+            "distill_add",
+            "distill_head",
+            "mlp_gelu",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "iterations": 320,
+            "start_temp": 3.8,
+            "end_temp": 0.04,
+            "acceptance_ratio": 0.021875,
+            "tabu_size": 80,
+            "penalties": {
+              "sram_capacity": 1.0,
+              "bandwidth_capacity": 1.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 1.0,
+              "memory_bank_conflict": 0.9,
+              "bandwidth_imbalance": 0.8
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 166,
+                "rank_score": 4381.166653074984,
+                "objective": 4443.096780026077,
+                "cost": 4443.096780026077,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 2,
+                "seed": 203,
+                "rank_score": 4381.166653074984,
+                "objective": 4443.096780026077,
+                "cost": 4443.096780026077,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 3,
+                "seed": 240,
+                "rank_score": 4402.274520085671,
+                "objective": 4464.204647036763,
+                "cost": 4464.204647036763,
+                "feasibility": 0.5160843912591051
+              }
+            ],
+            "selected_rank_score": 4381.166653074984,
+            "selected_objective": 4443.096780026077,
+            "objective_name": "cost"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1383.84,
+              "sram_reuse_loss": 436.1531999999999,
+              "bandwidth_congestion": 1772.2187784274877,
+              "pipeline_stalls": 337.9336291977176,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 699.4541451890034,
+              "penalty_cost": 59.28502721186845,
+              "total_cost": 4443.096780026077
+            },
+            "memory": {
+              "dram_access": 1383.84,
+              "sram_reuse_loss": 359.59999999999997,
+              "peak_sram_usage": 710.0,
+              "idle_cycles": 49.265,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.6989247311827957,
+              "prefetch_bytes_saved": 336.16,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1610.7662648929468,
+              "pipeline_stalls": 336.0460291977176,
+              "avg_utilization": 0.8705250025916879,
+              "read_utilization": 0.8705250025916879,
+              "write_utilization": 0.6652607075743666,
+              "backlog_pressure": 0.9763299876519608,
+              "violations": {
+                "bandwidth_capacity": 15.0,
+                "bandwidth_imbalance": 0.20526429501732124
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.4838709677419355,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.1574334470989761,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.20526429501732124
+            },
+            "cost_impact": {
+              "sram_capacity": 0.09420969917213129,
+              "bandwidth_capacity": 0.45579586147647017,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.29891136899227655,
+              "memory_bank_conflict": 0.0020692933539614472,
+              "bandwidth_imbalance": 0.00042689003222159836
+            },
+            "feasibility": 0.5160843912591051,
+            "latency_cycles": 3488.457478695865,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.7741935483870968
+            }
+          }
+        },
+        "Quantum (QAOA)": {
+          "order": [
+            "input_norm",
+            "patch_embed",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "depthwise_conv",
+            "skip_proj",
+            "pointwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "cnn_pool",
+            "cnn_dense",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "distill_proj",
+            "distill_relu",
+            "attn_proj",
+            "residual_add",
+            "mlp_dense1",
+            "distill_add",
+            "distill_head",
+            "mlp_gelu",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "layers": 3,
+            "iterations": 160,
+            "walkers": 7,
+            "acceptance_ratio": 0.5741071428571428,
+            "backend": "qaoa_style_multiwalker_simulator",
+            "final_gamma": [
+              0.44334568294647786,
+              0.8230948121709102,
+              0.2576520137912666
+            ],
+            "final_beta": [
+              0.6460339535567607,
+              0.3048225389225182,
+              0.5742013385537148
+            ],
+            "best_objective": 4439.666790758453,
+            "best_cost": 4439.666790758453,
+            "final_breakdown": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 554.4731999999999,
+              "bandwidth_congestion": 1400.8600232881251,
+              "pipeline_stalls": 280.33907624931504,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 744.5194372852235,
+              "penalty_cost": 56.223053935789544,
+              "total_cost": 4439.666790758453
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 208,
+                "rank_score": 4373.865696065425,
+                "objective": 4439.666790758453,
+                "cost": 4439.666790758453,
+                "feasibility": 0.5483424557752341
+              },
+              {
+                "trial": 2,
+                "seed": 245,
+                "rank_score": 4373.865696065425,
+                "objective": 4439.666790758453,
+                "cost": 4439.666790758453,
+                "feasibility": 0.5483424557752341
+              }
+            ],
+            "selected_rank_score": 4373.865696065425,
+            "selected_objective": 4439.666790758453,
+            "objective_name": "cost"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 554.4731999999999,
+              "bandwidth_congestion": 1400.8600232881251,
+              "pipeline_stalls": 280.33907624931504,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 744.5194372852235,
+              "penalty_cost": 56.223053935789544,
+              "total_cost": 4439.666790758453
+            },
+            "memory": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 458.19999999999993,
+              "peak_sram_usage": 680.0,
+              "idle_cycles": 62.184999999999995,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.682347670250896,
+              "prefetch_bytes_saved": 410.96,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1273.2538496017664,
+              "pipeline_stalls": 278.451476249315,
+              "avg_utilization": 0.8742503405455028,
+              "read_utilization": 0.8742503405455028,
+              "write_utilization": 0.665835407537143,
+              "backlog_pressure": 0.7293213667062152,
+              "violations": {
+                "bandwidth_capacity": 14.0,
+                "bandwidth_imbalance": 0.20841493300835978
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.45161290322580644,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.18760409556313992,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.20841493300835978
+            },
+            "cost_impact": {
+              "sram_capacity": 0.11977650537334521,
+              "bandwidth_capacity": 0.3631702181086649,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.35622325555294865,
+              "memory_bank_conflict": 0.0020694578592376466,
+              "bandwidth_imbalance": 0.00037356552123985024
+            },
+            "feasibility": 0.5483424557752341,
+            "latency_cycles": 3443.745874454321,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.8064516129032258
+            }
+          }
+        },
+        "Quantum + APR": {
+          "order": [
+            "input_norm",
+            "patch_embed",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "depthwise_conv",
+            "skip_proj",
+            "pointwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "cnn_pool",
+            "cnn_dense",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "attn_proj",
+            "residual_add",
+            "distill_proj",
+            "distill_relu",
+            "mlp_dense1",
+            "distill_add",
+            "distill_head",
+            "mlp_gelu",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "backend": "qaoa_style_multiwalker_simulator",
+            "rounds": 5,
+            "layers": 3,
+            "walkers": 7,
+            "round_trace": [
+              {
+                "round": 1,
+                "objective_score": 4943.550506616695,
+                "cost_score": 4943.550506616695,
+                "feasibility": 0.5483424557752341,
+                "penalties": {
+                  "sram_capacity": 1.2420971473101456,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.03562543227367273,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0362676213803572
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.12645161290322582,
+                    "cost_impact": 0.08517733490285663,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.05252914675767918,
+                    "cost_impact": 0.10595239379753121,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.000774967741935484,
+                    "cost_impact": 0.0006155241428833436,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.06020958958635511,
+                    "cost_impact": 0.00010514185259606887,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.45161290322580644,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.2150342485226968
+                }
+              },
+              {
+                "round": 2,
+                "objective_score": 4943.550506616695,
+                "cost_score": 4943.550506616695,
+                "feasibility": 0.5483424557752341,
+                "penalties": {
+                  "sram_capacity": 1.3064594845718518,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.061275743510717094,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.06319204207753
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.2174967741935484,
+                    "cost_impact": 0.1465050160329134,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.09035013242320819,
+                    "cost_impact": 0.18223811733175369,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.0013329445161290323,
+                    "cost_impact": 0.001058701525759351,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.1035604940885308,
+                    "cost_impact": 0.00018084398646523846,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.45161290322580644,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.2150342485226968
+                }
+              },
+              {
+                "round": 3,
+                "objective_score": 4943.550506616695,
+                "cost_score": 4943.550506616695,
+                "feasibility": 0.5483424557752341,
+                "penalties": {
+                  "sram_capacity": 1.395387558584137,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.07974396760138903,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0830097465917434
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.28304929032258064,
+                    "cost_impact": 0.1906609464465543,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.11758124210238907,
+                    "cost_impact": 0.23716383827639387,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.001734687793548387,
+                    "cost_impact": 0.0013777892414300764,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.13477314533009727,
+                    "cost_impact": 0.00023534952285104055,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.45161290322580644,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.2150342485226968
+                }
+              },
+              {
+                "round": 4,
+                "objective_score": 4943.550506616695,
+                "cost_score": 4943.550506616695,
+                "feasibility": 0.5483424557752341,
+                "penalties": {
+                  "sram_capacity": 1.5069566086044146,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.09304108894667283,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0975068297412338
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.3302471019354839,
+                    "cost_impact": 0.2224532163443757,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.1371876410713993,
+                    "cost_impact": 0.2767103573565348,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.0020239429532903225,
+                    "cost_impact": 0.0016075323967129984,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.15724625422402513,
+                    "cost_impact": 0.0002745935090488181,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.45161290322580644,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.2150342485226968
+                }
+              },
+              {
+                "round": 5,
+                "objective_score": 4943.550506616695,
+                "cost_score": 4943.550506616695,
+                "feasibility": 0.5483424557752341,
+                "penalties": {
+                  "sram_capacity": 1.640492685495548,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.10261501631527717,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.1080647401044237
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.3642295262967742,
+                    "cost_impact": 0.24534365067080716,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.15130424832908668,
+                    "cost_impact": 0.3051838510942363,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.002232206668304516,
+                    "cost_impact": 0.0017729474685167024,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.1734268926276532,
+                    "cost_impact": 0.0003028491791112179,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.45161290322580644,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.2150342485226968
+                }
+              }
+            ],
+            "final_penalties": {
+              "sram_capacity": 1.640492685495548,
+              "bandwidth_capacity": 14.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 14.0,
+              "memory_bank_conflict": 14.0,
+              "bandwidth_imbalance": 14.0
+            },
+            "best_objective": 4943.550506616695,
+            "warmup_trace": [
+              {
+                "objective": 4168.691179448737,
+                "cost": 4168.691179448737,
+                "feasibility": 0.5483424557752341,
+                "penalties_after_update": {
+                  "sram_capacity": 1.029739449531893,
+                  "bandwidth_capacity": 2.148,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 2.148,
+                  "memory_bank_conflict": 1.9332000000000003,
+                  "bandwidth_imbalance": 1.7184
+                }
+              },
+              {
+                "objective": 4237.713200602657,
+                "cost": 4237.713200602657,
+                "feasibility": 0.5160843912591051,
+                "penalties_after_update": {
+                  "sram_capacity": 1.076313310347614,
+                  "bandwidth_capacity": 4.613904,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 4.613904,
+                  "memory_bank_conflict": 4.152513600000001,
+                  "bandwidth_imbalance": 3.6911232
+                }
+              },
+              {
+                "objective": 4657.347177007157,
+                "cost": 4657.347177007157,
+                "feasibility": 0.5160843912591051,
+                "penalties_after_update": {
+                  "sram_capacity": 1.135619507790086,
+                  "bandwidth_capacity": 9.910665792,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 9.910665792,
+                  "memory_bank_conflict": 8.919599212800003,
+                  "bandwidth_imbalance": 7.9285326336
+                }
+              },
+              {
+                "objective": 4992.13330691966,
+                "cost": 4992.13330691966,
+                "feasibility": 0.5160843912591051,
+                "penalties_after_update": {
+                  "sram_capacity": 1.2062246890461348,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                }
+              }
+            ],
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 256,
+                "rank_score": 4102.890084755709,
+                "objective": 4168.691179448737,
+                "cost": 4168.691179448737,
+                "feasibility": 0.5483424557752341,
+                "selection_penalties": {
+                  "sram_capacity": 1.0,
+                  "bandwidth_capacity": 1.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 1.0,
+                  "memory_bank_conflict": 0.9,
+                  "bandwidth_imbalance": 0.8
+                },
+                "apr_final_penalties": {
+                  "sram_capacity": 1.640492685495548,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                }
+              },
+              {
+                "trial": 2,
+                "seed": 293,
+                "rank_score": 4102.890084755709,
+                "objective": 4168.691179448737,
+                "cost": 4168.691179448737,
+                "feasibility": 0.5483424557752341,
+                "selection_penalties": {
+                  "sram_capacity": 1.0,
+                  "bandwidth_capacity": 1.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 1.0,
+                  "memory_bank_conflict": 0.9,
+                  "bandwidth_imbalance": 0.8
+                },
+                "apr_final_penalties": {
+                  "sram_capacity": 1.640492685495548,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                }
+              }
+            ],
+            "selected_rank_score": 4102.890084755709,
+            "selected_objective": 4168.691179448737,
+            "objective_name": "cost"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 554.4731999999999,
+              "bandwidth_congestion": 1098.2769270407814,
+              "pipeline_stalls": 227.42065574926932,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 828.7011383161512,
+              "penalty_cost": 56.56725834253507,
+              "total_cost": 4168.691179448737
+            },
+            "memory": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 458.19999999999993,
+              "peak_sram_usage": 680.0,
+              "idle_cycles": 62.184999999999995,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.6886200716845878,
+              "prefetch_bytes_saved": 410.96,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 998.2108213710295,
+              "pipeline_stalls": 225.53305574926932,
+              "avg_utilization": 0.8808696560598398,
+              "read_utilization": 0.8808696560598398,
+              "write_utilization": 0.665835407537143,
+              "backlog_pressure": 0.6364247601271413,
+              "violations": {
+                "bandwidth_capacity": 14.0,
+                "bandwidth_imbalance": 0.2150342485226968
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.45161290322580644,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.18760409556313992,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.2150342485226968
+            },
+            "cost_impact": {
+              "sram_capacity": 0.1272336866916883,
+              "bandwidth_capacity": 0.3042047675102022,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.3784014064197543,
+              "memory_bank_conflict": 0.0021983005102976555,
+              "bandwidth_imbalance": 0.0003755066164145317
+            },
+            "feasibility": 0.5483424557752341,
+            "latency_cycles": 3390.8135194632882,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.8709677419354838
+            }
+          }
+        }
+      },
+      "summaries": {
+        "Greedy": {
+          "strategy": "Greedy",
+          "total_cost": 5669.651,
+          "total_energy": 5669.651,
+          "pairwise_energy": 0.0,
+          "latency": 3456.25,
+          "DRAM_usage": 2226.24,
+          "bandwidth_utilization": 86.74,
+          "idle_cycles": 353.102,
+          "feasibility_percent": 51.61,
+          "peak_sram": 670.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.903
+        },
+        "Lookahead": {
+          "strategy": "Lookahead",
+          "total_cost": 4168.691,
+          "total_energy": 4168.691,
+          "pairwise_energy": 0.0,
+          "latency": 3390.814,
+          "DRAM_usage": 1649.04,
+          "bandwidth_utilization": 88.09,
+          "idle_cycles": 287.718,
+          "feasibility_percent": 54.83,
+          "peak_sram": 680.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.871
+        },
+        "Beam Search": {
+          "strategy": "Beam Search",
+          "total_cost": 4169.259,
+          "total_energy": 4169.259,
+          "pairwise_energy": 0.0,
+          "latency": 3435.518,
+          "DRAM_usage": 1383.84,
+          "bandwidth_utilization": 87.71,
+          "idle_cycles": 332.386,
+          "feasibility_percent": 51.61,
+          "peak_sram": 710.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.806
+        },
+        "Simulated Annealing": {
+          "strategy": "Simulated Annealing",
+          "total_cost": 4443.097,
+          "total_energy": 4443.097,
+          "pairwise_energy": 0.0,
+          "latency": 3488.457,
+          "DRAM_usage": 1383.84,
+          "bandwidth_utilization": 87.05,
+          "idle_cycles": 385.311,
+          "feasibility_percent": 51.61,
+          "peak_sram": 710.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.774
+        },
+        "Quantum (QAOA)": {
+          "strategy": "Quantum (QAOA)",
+          "total_cost": 4439.667,
+          "total_energy": 4439.667,
+          "pairwise_energy": 0.0,
+          "latency": 3443.746,
+          "DRAM_usage": 1649.04,
+          "bandwidth_utilization": 87.43,
+          "idle_cycles": 340.636,
+          "feasibility_percent": 54.83,
+          "peak_sram": 680.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.806
+        },
+        "Quantum + APR": {
+          "strategy": "Quantum + APR",
+          "total_cost": 4168.691,
+          "total_energy": 4168.691,
+          "pairwise_energy": 0.0,
+          "latency": 3390.814,
+          "DRAM_usage": 1649.04,
+          "bandwidth_utilization": 88.09,
+          "idle_cycles": 287.718,
+          "feasibility_percent": 54.83,
+          "peak_sram": 680.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.871
+        }
+      }
+    },
+    "energy_based": {
+      "results": {
+        "Greedy": {
+          "order": [
+            "input_norm",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "depthwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "pointwise_conv",
+            "cnn_pool",
+            "cnn_dense",
+            "skip_proj",
+            "patch_embed",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "distill_proj",
+            "distill_relu",
+            "attn_proj",
+            "residual_add",
+            "mlp_dense1",
+            "mlp_gelu",
+            "distill_add",
+            "distill_head",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "penalties": {
+              "sram_capacity": 1.0,
+              "bandwidth_capacity": 1.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 1.0,
+              "memory_bank_conflict": 0.9,
+              "bandwidth_imbalance": 0.8
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 28,
+                "rank_score": 5689.1166760597725,
+                "objective": 5751.046803010865,
+                "cost": 5669.650624908466,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 2,
+                "seed": 65,
+                "rank_score": 5689.1166760597725,
+                "objective": 5751.046803010865,
+                "cost": 5669.650624908466,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 3,
+                "seed": 102,
+                "rank_score": 5689.1166760597725,
+                "objective": 5751.046803010865,
+                "cost": 5669.650624908466,
+                "feasibility": 0.5160843912591051
+              }
+            ],
+            "selected_rank_score": 5689.1166760597725,
+            "selected_objective": 5751.046803010865,
+            "objective_name": "energy"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 2226.24,
+              "sram_reuse_loss": 811.9932,
+              "bandwidth_congestion": 1815.2298962676036,
+              "pipeline_stalls": 264.68456774083427,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 738.1564647766322,
+              "penalty_cost": 59.1344961233963,
+              "total_cost": 5669.650624908466
+            },
+            "memory": {
+              "dram_access": 2226.24,
+              "sram_reuse_loss": 672.8000000000001,
+              "peak_sram_usage": 670.0,
+              "idle_cycles": 90.30499999999999,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.7172939068100358,
+              "prefetch_bytes_saved": 573.76,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1649.8640637319133,
+              "pipeline_stalls": 262.79696774083425,
+              "avg_utilization": 0.867398278998588,
+              "read_utilization": 0.867398278998588,
+              "write_utilization": 0.6650288126057312,
+              "backlog_pressure": 0.9855224999968576,
+              "violations": {
+                "bandwidth_capacity": 15.0,
+                "bandwidth_imbalance": 0.2023694663928568
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.4838709677419355,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.2532696245733788,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.2023694663928568
+            },
+            "cost_impact": {
+              "sram_capacity": 0.13865284010932225,
+              "bandwidth_capacity": 0.3551582052894391,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.38014419180478054,
+              "memory_bank_conflict": 0.0016358440049095326,
+              "bandwidth_imbalance": 0.00033904019605770846
+            },
+            "feasibility": 0.5160843912591051,
+            "latency_cycles": 3456.2497961158333,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.903225806451613
+            },
+            "energy_breakdown": {
+              "unary_cost": 5669.650624908466,
+              "data_reuse_reward": 165.88269375229038,
+              "fusion_reward": 29.936670967741936,
+              "bandwidth_spike_penalty": 266.92154282243126,
+              "memory_conflict_penalty": 10.294000000000002,
+              "pairwise_total": 81.39617810239893,
+              "total_energy": 5751.046803010865
+            },
+            "objective": {
+              "formulation": "energy_based",
+              "objective_score": 5751.046803010865,
+              "unary_source": "cost_model.total_cost"
+            }
+          }
+        },
+        "Lookahead": {
+          "order": [
+            "input_norm",
+            "patch_embed",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "skip_proj",
+            "depthwise_conv",
+            "pointwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "cnn_pool",
+            "cnn_dense",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "attn_proj",
+            "residual_add",
+            "distill_proj",
+            "distill_relu",
+            "mlp_dense1",
+            "distill_add",
+            "distill_head",
+            "mlp_gelu",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "depth": 3,
+            "rollout_trials": 4,
+            "branch_factor": 3,
+            "penalties": {
+              "sram_capacity": 1.0,
+              "bandwidth_capacity": 1.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 1.0,
+              "memory_bank_conflict": 0.9,
+              "bandwidth_imbalance": 0.8
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 84,
+                "rank_score": 4228.284504666917,
+                "objective": 4294.085599359945,
+                "cost": 4170.838286014558,
+                "feasibility": 0.5483424557752341
+              },
+              {
+                "trial": 2,
+                "seed": 121,
+                "rank_score": 4228.284504666917,
+                "objective": 4294.085599359945,
+                "cost": 4170.838286014558,
+                "feasibility": 0.5483424557752341
+              },
+              {
+                "trial": 3,
+                "seed": 158,
+                "rank_score": 4228.284504666917,
+                "objective": 4294.085599359945,
+                "cost": 4170.838286014558,
+                "feasibility": 0.5483424557752341
+              }
+            ],
+            "selected_rank_score": 4228.284504666917,
+            "selected_objective": 4294.085599359945,
+            "objective_name": "energy"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 554.4731999999999,
+              "bandwidth_congestion": 1117.3811638968368,
+              "pipeline_stalls": 233.35223238046603,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 805.8261383161512,
+              "penalty_cost": 56.553551421104835,
+              "total_cost": 4170.838286014558
+            },
+            "memory": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 458.19999999999993,
+              "peak_sram_usage": 680.0,
+              "idle_cycles": 62.184999999999995,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.6881720430107527,
+              "prefetch_bytes_saved": 410.96,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1015.5752192548142,
+              "pipeline_stalls": 231.46463238046604,
+              "avg_utilization": 0.8806060614169506,
+              "read_utilization": 0.8806060614169506,
+              "write_utilization": 0.665835407537143,
+              "backlog_pressure": 0.6452538091972556,
+              "violations": {
+                "bandwidth_capacity": 14.0,
+                "bandwidth_imbalance": 0.21477065387980765
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.45161290322580644,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.18760409556313992,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.21477065387980765
+            },
+            "cost_impact": {
+              "sram_capacity": 0.12717063080180488,
+              "bandwidth_capacity": 0.3097960695839743,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.3782138740292738,
+              "memory_bank_conflict": 0.0021972110520062844,
+              "bandwidth_imbalance": 0.0003773454961298172
+            },
+            "feasibility": 0.5483424557752341,
+            "latency_cycles": 3396.7464204518456,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.8064516129032258
+            },
+            "energy_breakdown": {
+              "unary_cost": 4170.838286014558,
+              "data_reuse_reward": 156.1839154640547,
+              "fusion_reward": 29.936670967741936,
+              "bandwidth_spike_penalty": 300.4618997771833,
+              "memory_conflict_penalty": 8.905999999999999,
+              "pairwise_total": 123.24731334538667,
+              "total_energy": 4294.085599359945
+            },
+            "objective": {
+              "formulation": "energy_based",
+              "objective_score": 4294.085599359945,
+              "unary_source": "cost_model.total_cost"
+            }
+          }
+        },
+        "Beam Search": {
+          "order": [
+            "input_norm",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "skip_proj",
+            "depthwise_conv",
+            "pointwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "cnn_pool",
+            "cnn_dense",
+            "patch_embed",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "attn_proj",
+            "residual_add",
+            "distill_proj",
+            "distill_relu",
+            "mlp_dense1",
+            "distill_add",
+            "distill_head",
+            "mlp_gelu",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "beam_width": 5,
+            "expansion_topk": 4,
+            "penalties": {
+              "sram_capacity": 1.0,
+              "bandwidth_capacity": 1.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 1.0,
+              "memory_bank_conflict": 0.9,
+              "bandwidth_imbalance": 0.8
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 118,
+                "rank_score": 4232.734089649282,
+                "objective": 4294.664216600375,
+                "cost": 4177.613140971481,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 2,
+                "seed": 155,
+                "rank_score": 4232.734089649282,
+                "objective": 4294.664216600375,
+                "cost": 4177.613140971481,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 3,
+                "seed": 192,
+                "rank_score": 4232.734089649282,
+                "objective": 4294.664216600375,
+                "cost": 4177.613140971481,
+                "feasibility": 0.5160843912591051
+              }
+            ],
+            "selected_rank_score": 4232.734089649282,
+            "selected_objective": 4294.664216600375,
+            "objective_name": "energy"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1383.84,
+              "sram_reuse_loss": 436.1531999999999,
+              "bandwidth_congestion": 1490.589215905561,
+              "pipeline_stalls": 292.4361621459138,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 760.7608462199313,
+              "penalty_cost": 59.62171670007539,
+              "total_cost": 4177.613140971481
+            },
+            "memory": {
+              "dram_access": 1383.84,
+              "sram_reuse_loss": 359.59999999999997,
+              "peak_sram_usage": 710.0,
+              "idle_cycles": 49.265,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.7047491039426523,
+              "prefetch_bytes_saved": 336.16,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1354.7666259889131,
+              "pipeline_stalls": 290.54856214591376,
+              "avg_utilization": 0.8768533314006849,
+              "read_utilization": 0.8768533314006849,
+              "write_utilization": 0.6651142385332303,
+              "backlog_pressure": 0.8985125136535383,
+              "violations": {
+                "bandwidth_capacity": 15.0,
+                "bandwidth_imbalance": 0.21173909286745463
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.4838709677419355,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.1574334470989761,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.21173909286745463
+            },
+            "cost_impact": {
+              "sram_capacity": 0.09994849821558563,
+              "bandwidth_capacity": 0.4085965867418186,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.3171196033197877,
+              "memory_bank_conflict": 0.0021953446928861474,
+              "bandwidth_imbalance": 0.0004350615210049306
+            },
+            "feasibility": 0.5160843912591051,
+            "latency_cycles": 3442.9483390229616,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.7741935483870968
+            },
+            "energy_breakdown": {
+              "unary_cost": 4177.613140971481,
+              "data_reuse_reward": 164.02940084417168,
+              "fusion_reward": 29.936670967741936,
+              "bandwidth_spike_penalty": 302.879147440808,
+              "memory_conflict_penalty": 8.138,
+              "pairwise_total": 117.0510756288944,
+              "total_energy": 4294.664216600375
+            },
+            "objective": {
+              "formulation": "energy_based",
+              "objective_score": 4294.664216600375,
+              "unary_source": "cost_model.total_cost"
+            }
+          }
+        },
+        "Simulated Annealing": {
+          "order": [
+            "input_norm",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "skip_proj",
+            "depthwise_conv",
+            "pointwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "cnn_pool",
+            "cnn_dense",
+            "patch_embed",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "distill_proj",
+            "distill_relu",
+            "attn_proj",
+            "residual_add",
+            "mlp_dense1",
+            "distill_add",
+            "distill_head",
+            "mlp_gelu",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "iterations": 320,
+            "start_temp": 3.8,
+            "end_temp": 0.04,
+            "acceptance_ratio": 0.01875,
+            "tabu_size": 80,
+            "penalties": {
+              "sram_capacity": 1.0,
+              "bandwidth_capacity": 1.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 1.0,
+              "memory_bank_conflict": 0.9,
+              "bandwidth_imbalance": 0.8
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 166,
+                "rank_score": 4968.737201676679,
+                "objective": 5030.667328627772,
+                "cost": 4927.413980222628,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 2,
+                "seed": 203,
+                "rank_score": 4467.104619760612,
+                "objective": 4529.034746711704,
+                "cost": 4448.713354350114,
+                "feasibility": 0.5160843912591051
+              },
+              {
+                "trial": 3,
+                "seed": 240,
+                "rank_score": 4496.741788463814,
+                "objective": 4558.671915414907,
+                "cost": 4464.204647036763,
+                "feasibility": 0.5160843912591051
+              }
+            ],
+            "selected_rank_score": 4467.104619760612,
+            "selected_objective": 4529.034746711704,
+            "objective_name": "energy"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1383.84,
+              "sram_reuse_loss": 436.1531999999999,
+              "bandwidth_congestion": 1793.2890979874915,
+              "pipeline_stalls": 345.3623988802899,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 676.5791451890034,
+              "penalty_cost": 59.27751229332986,
+              "total_cost": 4448.713354350114
+            },
+            "memory": {
+              "dram_access": 1383.84,
+              "sram_reuse_loss": 359.59999999999997,
+              "peak_sram_usage": 710.0,
+              "idle_cycles": 49.265,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.6984767025089605,
+              "prefetch_bytes_saved": 336.16,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1629.9158231601832,
+              "pipeline_stalls": 343.4747988802899,
+              "avg_utilization": 0.870234015886348,
+              "read_utilization": 0.870234015886348,
+              "write_utilization": 0.6651142385332303,
+              "backlog_pressure": 0.9914091202326117,
+              "violations": {
+                "bandwidth_capacity": 15.0,
+                "bandwidth_imbalance": 0.2051197773531177
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.4838709677419355,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.1574334470989761,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.2051197773531177
+            },
+            "cost_impact": {
+              "sram_capacity": 0.0940953910451207,
+              "bandwidth_capacity": 0.46139120131872613,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.2985486887265297,
+              "memory_bank_conflict": 0.0020667826034802828,
+              "bandwidth_imbalance": 0.0004296252323704318
+            },
+            "feasibility": 0.5160843912591051,
+            "latency_cycles": 3495.888510248325,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.7096774193548387
+            },
+            "energy_breakdown": {
+              "unary_cost": 4448.713354350114,
+              "data_reuse_reward": 172.5768800487601,
+              "fusion_reward": 29.936670967741936,
+              "bandwidth_spike_penalty": 274.6969433780921,
+              "memory_conflict_penalty": 8.138,
+              "pairwise_total": 80.32139236159004,
+              "total_energy": 4529.034746711704
+            },
+            "objective": {
+              "formulation": "energy_based",
+              "objective_score": 4529.034746711704,
+              "unary_source": "cost_model.total_cost"
+            }
+          }
+        },
+        "Quantum (QAOA)": {
+          "order": [
+            "input_norm",
+            "patch_embed",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "skip_proj",
+            "depthwise_conv",
+            "pointwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "cnn_pool",
+            "cnn_dense",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "distill_proj",
+            "distill_relu",
+            "attn_proj",
+            "residual_add",
+            "mlp_dense1",
+            "distill_add",
+            "distill_head",
+            "mlp_gelu",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "layers": 3,
+            "iterations": 160,
+            "walkers": 7,
+            "acceptance_ratio": 0.6053571428571428,
+            "backend": "qaoa_style_multiwalker_simulator",
+            "final_gamma": [
+              0.39962269882924906,
+              0.6989127279464259,
+              0.24844853175258935
+            ],
+            "final_beta": [
+              0.7407674615383505,
+              0.3791497015904735,
+              0.59914061644185
+            ],
+            "best_objective": 4528.346892369161,
+            "best_cost": 4441.8292622910785,
+            "final_breakdown": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 554.4731999999999,
+              "bandwidth_congestion": 1419.9786621358899,
+              "pipeline_stalls": 286.2716158556061,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 721.6444372852235,
+              "penalty_cost": 56.20934701435931,
+              "total_cost": 4441.8292622910785
+            },
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 208,
+                "rank_score": 4462.545797676133,
+                "objective": 4528.346892369161,
+                "cost": 4441.8292622910785,
+                "feasibility": 0.5483424557752341
+              },
+              {
+                "trial": 2,
+                "seed": 245,
+                "rank_score": 4462.545797676133,
+                "objective": 4528.346892369161,
+                "cost": 4441.8292622910785,
+                "feasibility": 0.5483424557752341
+              }
+            ],
+            "selected_rank_score": 4462.545797676133,
+            "selected_objective": 4528.346892369161,
+            "objective_name": "energy"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 554.4731999999999,
+              "bandwidth_congestion": 1419.9786621358899,
+              "pipeline_stalls": 286.2716158556061,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 721.6444372852235,
+              "penalty_cost": 56.20934701435931,
+              "total_cost": 4441.8292622910785
+            },
+            "memory": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 458.19999999999993,
+              "peak_sram_usage": 680.0,
+              "idle_cycles": 62.184999999999995,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.681899641577061,
+              "prefetch_bytes_saved": 410.96,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1290.6313402052872,
+              "pipeline_stalls": 284.3840158556061,
+              "avg_utilization": 0.8739867459026136,
+              "read_utilization": 0.8739867459026136,
+              "write_utilization": 0.665835407537143,
+              "backlog_pressure": 0.7381504157763293,
+              "violations": {
+                "bandwidth_capacity": 14.0,
+                "bandwidth_imbalance": 0.20815133836547062
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.45161290322580644,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.18760409556313992,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.20815133836547062
+            },
+            "cost_impact": {
+              "sram_capacity": 0.11972022550012655,
+              "bandwidth_capacity": 0.36840855074834195,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.35605587548456574,
+              "memory_bank_conflict": 0.0020684854746653445,
+              "bandwidth_imbalance": 0.0003752963348451844
+            },
+            "feasibility": 0.5483424557752341,
+            "latency_cycles": 3449.679738417972,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.7419354838709677
+            },
+            "energy_breakdown": {
+              "unary_cost": 4441.8292622910785,
+              "data_reuse_reward": 164.7313946686432,
+              "fusion_reward": 29.936670967741936,
+              "bandwidth_spike_penalty": 272.2796957144674,
+              "memory_conflict_penalty": 8.905999999999999,
+              "pairwise_total": 86.51763007808226,
+              "total_energy": 4528.346892369161
+            },
+            "objective": {
+              "formulation": "energy_based",
+              "objective_score": 4528.346892369161,
+              "unary_source": "cost_model.total_cost"
+            }
+          }
+        },
+        "Quantum + APR": {
+          "order": [
+            "input_norm",
+            "patch_embed",
+            "conv_stem",
+            "bn_stem",
+            "relu_stem",
+            "skip_proj",
+            "depthwise_conv",
+            "pointwise_conv",
+            "aux_pool",
+            "aux_dense",
+            "aux_relu",
+            "cnn_pool",
+            "cnn_dense",
+            "token_mix",
+            "context_add",
+            "context_norm",
+            "attn_qkv",
+            "attn_softmax",
+            "attn_proj",
+            "residual_add",
+            "distill_proj",
+            "distill_relu",
+            "mlp_dense1",
+            "distill_add",
+            "mlp_gelu",
+            "distill_head",
+            "mlp_dense2",
+            "merge_head",
+            "classifier_pre",
+            "classifier",
+            "output_norm"
+          ],
+          "metadata": {
+            "backend": "qaoa_style_multiwalker_simulator",
+            "rounds": 5,
+            "layers": 3,
+            "walkers": 7,
+            "round_trace": [
+              {
+                "round": 1,
+                "objective_score": 5055.143494516094,
+                "cost_score": 4950.0559777724,
+                "feasibility": 0.5806005202913631,
+                "penalties": {
+                  "sram_capacity": 1.2480491140315175,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0352097656777193,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.035836969055775
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.11741935483870969,
+                    "cost_impact": 0.0871554630998543,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.05252914675767918,
+                    "cost_impact": 0.10471617382623044,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.000774967741935484,
+                    "cost_impact": 0.000608342396336831,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.0602771945303209,
+                    "cost_impact": 0.00010528846492776965,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.41935483870967744,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.21527569475114605
+                }
+              },
+              {
+                "round": 2,
+                "objective_score": 5055.143494516094,
+                "cost_score": 4950.0559777724,
+                "feasibility": 0.5806005202913631,
+                "penalties": {
+                  "sram_capacity": 1.3119422325725034,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0605607969656772,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0624321882601302
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.20196129032258064,
+                    "cost_impact": 0.1499073965317494,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.09035013242320819,
+                    "cost_impact": 0.18011181898111636,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.0013329445161290323,
+                    "cost_impact": 0.0010463489216993493,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.10367677459215194,
+                    "cost_impact": 0.0001810961596757638,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.41935483870967744,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.21527569475114605
+                }
+              },
+              {
+                "round": 3,
+                "objective_score": 5055.143494516094,
+                "cost_score": 4950.0559777724,
+                "feasibility": 0.5806005202913631,
+                "penalties": {
+                  "sram_capacity": 1.4001599742678956,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.07881353949300687,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0820025525153627
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.2628314838709678,
+                    "cost_impact": 0.19508878860271384,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.11758124210238907,
+                    "cost_impact": 0.2343966834926342,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.001734687793548387,
+                    "cost_impact": 0.0013617136199603624,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.13492447223667028,
+                    "cost_impact": 0.00023567769989431958,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.41935483870967744,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.21527569475114605
+                }
+              },
+              {
+                "round": 4,
+                "objective_score": 5055.143494516094,
+                "cost_score": 4950.0559777724,
+                "feasibility": 0.5806005202913631,
+                "penalties": {
+                  "sram_capacity": 1.5107434347648776,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.09195551411268424,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0963160504037186
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.3066580232258065,
+                    "cost_impact": 0.22761939089380823,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.1371876410713993,
+                    "cost_impact": 0.2734817859409271,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.0020239429532903225,
+                    "cost_impact": 0.0015887762027082919,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.1574228145407235,
+                    "cost_impact": 0.00027497640885167974,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.41935483870967744,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.21527569475114605
+                }
+              },
+              {
+                "round": 5,
+                "objective_score": 5055.143494516094,
+                "cost_score": 4950.0559777724,
+                "feasibility": 0.5806005202913631,
+                "penalties": {
+                  "sram_capacity": 1.6429725730071205,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                },
+                "apr_signal": {
+                  "sram_capacity": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.10141773583885196,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.1067388697022391
+                  },
+                  "bandwidth_capacity": {
+                    "violation_rate": 0.33821313156129035,
+                    "cost_impact": 0.25104142454339623,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "dependency_conflict": {
+                    "violation_rate": 0.0,
+                    "cost_impact": 0.0,
+                    "constraint_frequency": 0.0,
+                    "growth": 1.0
+                  },
+                  "dram_pressure": {
+                    "violation_rate": 0.15130424832908668,
+                    "cost_impact": 0.30162305970369796,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "memory_bank_conflict": {
+                    "violation_rate": 0.002232206668304516,
+                    "cost_impact": 0.001752261262286801,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  },
+                  "bandwidth_imbalance": {
+                    "violation_rate": 0.17362162099964182,
+                    "cost_impact": 0.00030327147930097904,
+                    "constraint_frequency": 1.0,
+                    "growth": 2.4
+                  }
+                },
+                "violation_rate": {
+                  "sram_capacity": 0.0,
+                  "bandwidth_capacity": 0.41935483870967744,
+                  "dependency_conflict": 0.0,
+                  "dram_pressure": 0.18760409556313992,
+                  "memory_bank_conflict": 0.002767741935483871,
+                  "bandwidth_imbalance": 0.21527569475114605
+                }
+              }
+            ],
+            "final_penalties": {
+              "sram_capacity": 1.6429725730071205,
+              "bandwidth_capacity": 14.0,
+              "dependency_conflict": 1.0,
+              "dram_pressure": 14.0,
+              "memory_bank_conflict": 14.0,
+              "bandwidth_imbalance": 14.0
+            },
+            "best_objective": 5055.143494516094,
+            "warmup_trace": [
+              {
+                "objective": 4294.085599359945,
+                "cost": 4170.838286014558,
+                "feasibility": 0.5483424557752341,
+                "penalties_after_update": {
+                  "sram_capacity": 1.029724446962729,
+                  "bandwidth_capacity": 2.148,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 2.148,
+                  "memory_bank_conflict": 1.9332000000000003,
+                  "bandwidth_imbalance": 1.7184
+                }
+              },
+              {
+                "objective": 4363.1099473720615,
+                "cost": 4246.058871743167,
+                "feasibility": 0.5160843912591051,
+                "penalties_after_update": {
+                  "sram_capacity": 1.076238436130439,
+                  "bandwidth_capacity": 4.613904,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 4.613904,
+                  "memory_bank_conflict": 4.152513600000001,
+                  "bandwidth_imbalance": 3.6911232
+                }
+              },
+              {
+                "objective": 4743.257985498618,
+                "cost": 4662.936593137028,
+                "feasibility": 0.5160843912591051,
+                "penalties_after_update": {
+                  "sram_capacity": 1.1354653128943437,
+                  "bandwidth_capacity": 9.910665792,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 9.910665792,
+                  "memory_bank_conflict": 8.919599212800003,
+                  "bandwidth_imbalance": 7.9285326336
+                }
+              },
+              {
+                "objective": 5558.785952634465,
+                "cost": 5455.532604229321,
+                "feasibility": 0.5160843912591051,
+                "penalties_after_update": {
+                  "sram_capacity": 1.212420542510596,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                }
+              }
+            ],
+            "trials": [
+              {
+                "trial": 1,
+                "seed": 256,
+                "rank_score": 4252.34042792013,
+                "objective": 4322.012490355094,
+                "cost": 4216.924973611401,
+                "feasibility": 0.5806005202913631,
+                "selection_penalties": {
+                  "sram_capacity": 1.0,
+                  "bandwidth_capacity": 1.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 1.0,
+                  "memory_bank_conflict": 0.9,
+                  "bandwidth_imbalance": 0.8
+                },
+                "apr_final_penalties": {
+                  "sram_capacity": 1.6429725730071205,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                }
+              },
+              {
+                "trial": 2,
+                "seed": 293,
+                "rank_score": 4252.34042792013,
+                "objective": 4322.012490355094,
+                "cost": 4216.924973611401,
+                "feasibility": 0.5806005202913631,
+                "selection_penalties": {
+                  "sram_capacity": 1.0,
+                  "bandwidth_capacity": 1.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 1.0,
+                  "memory_bank_conflict": 0.9,
+                  "bandwidth_imbalance": 0.8
+                },
+                "apr_final_penalties": {
+                  "sram_capacity": 1.6429725730071205,
+                  "bandwidth_capacity": 14.0,
+                  "dependency_conflict": 1.0,
+                  "dram_pressure": 14.0,
+                  "memory_bank_conflict": 14.0,
+                  "bandwidth_imbalance": 14.0
+                }
+              }
+            ],
+            "selected_rank_score": 4252.34042792013,
+            "selected_objective": 4322.012490355094,
+            "objective_name": "energy"
+          },
+          "evaluation": {
+            "breakdown": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 554.4731999999999,
+              "bandwidth_congestion": 1147.9219263315726,
+              "pipeline_stalls": 224.57708331217424,
+              "fusion_gain": 245.788,
+              "parallelism_loss": 833.3467568728524,
+              "penalty_cost": 53.35400709480153,
+              "total_cost": 4216.924973611401
+            },
+            "memory": {
+              "dram_access": 1649.04,
+              "sram_reuse_loss": 458.19999999999993,
+              "peak_sram_usage": 680.0,
+              "idle_cycles": 62.184999999999995,
+              "bank_conflict_cycles": 8.58,
+              "spill_count": 0.0,
+              "avg_sram_utilization": 0.6917562724014337,
+              "prefetch_bytes_saved": 410.96,
+              "violations": {
+                "sram_capacity": 0.0,
+                "memory_bank_conflict": 0.002767741935483871
+              }
+            },
+            "bandwidth": {
+              "bandwidth_congestion": 1043.3350692780318,
+              "pipeline_stalls": 222.68948331217425,
+              "avg_utilization": 0.881111102288289,
+              "read_utilization": 0.881111102288289,
+              "write_utilization": 0.665835407537143,
+              "backlog_pressure": 0.6580522746429626,
+              "violations": {
+                "bandwidth_capacity": 13.0,
+                "bandwidth_imbalance": 0.21527569475114605
+              }
+            },
+            "fusion": {
+              "fused_edges": [
+                [
+                  "conv_stem",
+                  "bn_stem"
+                ],
+                [
+                  "bn_stem",
+                  "relu_stem"
+                ],
+                [
+                  "aux_dense",
+                  "aux_relu"
+                ],
+                [
+                  "distill_proj",
+                  "distill_relu"
+                ],
+                [
+                  "classifier",
+                  "output_norm"
+                ]
+              ],
+              "fusion_gain": 245.788,
+              "fused_triplets": [
+                [
+                  "conv_stem",
+                  "bn_stem",
+                  "relu_stem"
+                ]
+              ]
+            },
+            "violation_rate": {
+              "sram_capacity": 0.0,
+              "bandwidth_capacity": 0.41935483870967744,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.18760409556313992,
+              "memory_bank_conflict": 0.002767741935483871,
+              "bandwidth_imbalance": 0.21527569475114605
+            },
+            "cost_impact": {
+              "sram_capacity": 0.12574916313471177,
+              "bandwidth_capacity": 0.31126951107090817,
+              "dependency_conflict": 0.0,
+              "dram_pressure": 0.3739863350936801,
+              "memory_bank_conflict": 0.002172651415488682,
+              "bandwidth_imbalance": 0.00037603023188489157
+            },
+            "feasibility": 0.5806005202913631,
+            "latency_cycles": 3387.9731911533704,
+            "derived": {
+              "critical_path_cycles": 1746.0,
+              "frontier_mean": 1.8387096774193548
+            },
+            "energy_breakdown": {
+              "unary_cost": 4216.924973611401,
+              "data_reuse_reward": 142.75738058681847,
+              "fusion_reward": 29.936670967741936,
+              "bandwidth_spike_penalty": 268.2835682982541,
+              "memory_conflict_penalty": 9.498,
+              "pairwise_total": 105.08751674369371,
+              "total_energy": 4322.012490355094
+            },
+            "objective": {
+              "formulation": "energy_based",
+              "objective_score": 4322.012490355094,
+              "unary_source": "cost_model.total_cost"
+            }
+          }
+        }
+      },
+      "summaries": {
+        "Greedy": {
+          "strategy": "Greedy",
+          "total_cost": 5669.651,
+          "total_energy": 5751.047,
+          "pairwise_energy": 81.396,
+          "latency": 3456.25,
+          "DRAM_usage": 2226.24,
+          "bandwidth_utilization": 86.74,
+          "idle_cycles": 353.102,
+          "feasibility_percent": 51.61,
+          "peak_sram": 670.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.903
+        },
+        "Lookahead": {
+          "strategy": "Lookahead",
+          "total_cost": 4170.838,
+          "total_energy": 4294.086,
+          "pairwise_energy": 123.247,
+          "latency": 3396.746,
+          "DRAM_usage": 1649.04,
+          "bandwidth_utilization": 88.06,
+          "idle_cycles": 293.65,
+          "feasibility_percent": 54.83,
+          "peak_sram": 680.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.806
+        },
+        "Beam Search": {
+          "strategy": "Beam Search",
+          "total_cost": 4177.613,
+          "total_energy": 4294.664,
+          "pairwise_energy": 117.051,
+          "latency": 3442.948,
+          "DRAM_usage": 1383.84,
+          "bandwidth_utilization": 87.69,
+          "idle_cycles": 339.814,
+          "feasibility_percent": 51.61,
+          "peak_sram": 710.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.774
+        },
+        "Simulated Annealing": {
+          "strategy": "Simulated Annealing",
+          "total_cost": 4448.713,
+          "total_energy": 4529.035,
+          "pairwise_energy": 80.321,
+          "latency": 3495.889,
+          "DRAM_usage": 1383.84,
+          "bandwidth_utilization": 87.02,
+          "idle_cycles": 392.74,
+          "feasibility_percent": 51.61,
+          "peak_sram": 710.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.71
+        },
+        "Quantum (QAOA)": {
+          "strategy": "Quantum (QAOA)",
+          "total_cost": 4441.829,
+          "total_energy": 4528.347,
+          "pairwise_energy": 86.518,
+          "latency": 3449.68,
+          "DRAM_usage": 1649.04,
+          "bandwidth_utilization": 87.4,
+          "idle_cycles": 346.569,
+          "feasibility_percent": 54.83,
+          "peak_sram": 680.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.742
+        },
+        "Quantum + APR": {
+          "strategy": "Quantum + APR",
+          "total_cost": 4216.925,
+          "total_energy": 4322.012,
+          "pairwise_energy": 105.088,
+          "latency": 3387.973,
+          "DRAM_usage": 1649.04,
+          "bandwidth_utilization": 88.11,
+          "idle_cycles": 284.874,
+          "feasibility_percent": 58.06,
+          "peak_sram": 680.0,
+          "spill_count": 0.0,
+          "frontier_mean": 1.839
+        }
+      }
+    }
+  },
+  "comparison": {
+    "Greedy": {
+      "old_cost": 5669.650624908466,
+      "new_cost": 5669.650624908466,
+      "delta_cost": 0.0,
+      "improvement_percent": 0.0,
+      "latency_delta": 0.0,
+      "feasibility_delta": 0.0
+    },
+    "Lookahead": {
+      "old_cost": 4168.691179448737,
+      "new_cost": 4170.838286014558,
+      "delta_cost": -2.1471065658215593,
+      "improvement_percent": -0.0005150553191386776,
+      "latency_delta": -5.932900988557321,
+      "feasibility_delta": 0.0
+    },
+    "Beam Search": {
+      "old_cost": 4169.2588427044875,
+      "new_cost": 4177.613140971481,
+      "delta_cost": -8.354298266993283,
+      "improvement_percent": -0.002003784984856942,
+      "latency_delta": -7.430261547305236,
+      "feasibility_delta": 0.0
+    },
+    "Simulated Annealing": {
+      "old_cost": 4443.096780026077,
+      "new_cost": 4448.713354350114,
+      "delta_cost": -5.616574324037174,
+      "improvement_percent": -0.0012641125327916467,
+      "latency_delta": -7.431031552459899,
+      "feasibility_delta": 0.0
+    },
+    "Quantum (QAOA)": {
+      "old_cost": 4439.666790758453,
+      "new_cost": 4441.8292622910785,
+      "delta_cost": -2.1624715326252044,
+      "improvement_percent": -0.00048707969190989154,
+      "latency_delta": -5.93386396365122,
+      "feasibility_delta": 0.0
+    },
+    "Quantum + APR": {
+      "old_cost": 4168.691179448737,
+      "new_cost": 4216.924973611401,
+      "delta_cost": -48.2337941626638,
+      "improvement_percent": -0.011570488694497677,
+      "latency_delta": 2.8403283099178225,
+      "feasibility_delta": 3.2258064516129004
+    }
+  },
+  "x_factors": {
+    "classical_methods": {
+      "baseline_cost": 5669.650624908466,
+      "optimized_cost": 4168.691179448737,
+      "x_factor": 0.26473579145522064
+    },
+    "quantum": {
+      "baseline_cost": 5669.650624908466,
+      "optimized_cost": 4439.666790758453,
+      "x_factor": 0.21694173336648415
+    },
+    "quantum_plus_new_formulation": {
+      "baseline_cost": 5669.650624908466,
+      "optimized_cost": 4216.924973611401,
+      "x_factor": 0.2562284252427845
+    }
+  }
+}
