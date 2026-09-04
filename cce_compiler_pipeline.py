@@ -1,4 +1,4 @@
-﻿"""
+"""
 cce_compiler_pipeline.py
 =============================================================================
 Constraint-Coupled Energy (CCE) Compiler & Optimization Pipeline for NPUs

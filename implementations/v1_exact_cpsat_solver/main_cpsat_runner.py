@@ -3,7 +3,10 @@ Tier 1 Exact CP-SAT Solver Runner for CCE-QOS.
 Solves NPU task DAGs with exact global optimality guarantees.
 """
 
-from .ortools_cpsat_engine import ExactCPSATScheduler
+try:
+    from ortools_cpsat_engine import ExactCPSATScheduler
+except ImportError:
+    from .ortools_cpsat_engine import ExactCPSATScheduler
 
 
 def run_cpsat_benchmark():
