@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software or research architecture in your work, please cite it as below."
+title: "CCE-QOS: Constraint-Coupled Energy QUBO Hamiltonian Compiler and LLM KV-Cache Paging Scheduler"
+authors:
+  - family-names: "Koduru"
+    given-names: "Yagnesh Kumar"
+    affiliation: "Esthien Labs"
+    orcid: "https://orcid.org/0009-0000-0000-0000"
+date-released: 2026-09-04
+repository-code: "https://github.com/yagneshkumarkoduru/CCE-QOS"
+license: "MIT"
+keywords:
+  - "qubo"
+  - "compiler optimization"
+  - "kv-cache continuous batching"
+  - "cp-sat"
+  - "qaoa"
+  - "npu"

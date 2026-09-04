@@ -2,12 +2,13 @@
 
 **Research Project | Hardware-Aware NPU Compiler Design, QUBO Scheduling & Memory Architecture Optimization**
 
+[![CI](https://github.com/yagneshkumarkoduru/CCE-QOS/actions/workflows/ci.yml/badge.svg)](https://github.com/yagneshkumarkoduru/CCE-QOS/actions)
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Compiler](https://img.shields.io/badge/compiler-CCE--QUBO%20%7C%20APR%20Convergence-brightgreen.svg)](docs/paper/RESEARCH_PAPER.md)
 [![Paper](https://img.shields.io/badge/paper-IEEE%2FACM%20TCAD%20Draft-purple.svg)](docs/paper/RESEARCH_PAPER.md)
 [![Solvers](https://img.shields.io/badge/solvers-OR--Tools%20CP--SAT%20%7C%20Variational%20QAOA-orange.svg)](docs/HAMILTONIAN_AND_KV_CACHE_FORMULATION.md)
 [![Memory](https://img.shields.io/badge/memory-LLM%20KV--Cache%20Paging%20(56%25%20fault%20cut)-red.svg)](docs/IMPLEMENTATION_VERSIONS.md)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > 📄 **Research Paper Manuscript:** Read the full IEEE/ACM Transactions on Computer-Aided Design of Integrated Circuits and Systems manuscript: [**`docs/paper/RESEARCH_PAPER.md`**](docs/paper/RESEARCH_PAPER.md) with Theorem 1 (*APR Zero-Violation Convergence Proof*) and exact CCE Hamiltonian formulations.  
 > 📐 **Mathematical Derivations & Proofs:** Complete Ising transformations, augmented Lagrangian dual updates, and paged KV-cache theorems: [**`docs/HAMILTONIAN_AND_KV_CACHE_FORMULATION.md`**](docs/HAMILTONIAN_AND_KV_CACHE_FORMULATION.md).  
