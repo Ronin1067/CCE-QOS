@@ -33,7 +33,7 @@ jobs:
 
       - name: Run Tier 2 CCE-QUBO APR Benchmark
         run: |
-          python implementations/v2_cce_qubo_apr_engine/qubo_apr_benchmark.py
+          python implementations/v2_cce_qubo_apr_engine/cce_qubo_benchmark.py
 
       - name: Run Tier 3 LLM KV-Cache Paging Scheduler
         run: |

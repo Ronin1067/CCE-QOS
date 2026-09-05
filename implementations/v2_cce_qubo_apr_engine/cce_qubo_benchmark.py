@@ -7,7 +7,13 @@ Generates publication plot: figures/fig_cce_qubo_apr_benchmark.png
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from .apr_penalty_refinement import AdaptivePenaltyRefinement
+try:
+    from apr_penalty_refinement import AdaptivePenaltyRefinement
+except ImportError:
+    try:
+        from .apr_penalty_refinement import AdaptivePenaltyRefinement
+    except ImportError:
+        from implementations.v2_cce_qubo_apr_engine.apr_penalty_refinement import AdaptivePenaltyRefinement
 
 
 def run_cce_qubo_benchmark():
